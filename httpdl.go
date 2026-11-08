@@ -155,128 +155,136 @@ func startHTTP(j *Job) {
 	}
 
 	// 多段
-	segs := j.SegN
-	if segs <= 0 {
-		// 自动：按文件大小分档
-		switch {
-		case size < 8<<20:
-			segs = 1
-		case size < 64<<20:
-			segs = 4
-		case size < 256<<20:
-			segs = 8
-		case size < 2<<30:
-			segs = 16
-		default:
-			segs = 32
-		}
-	}
-	if segs > 64 {
-		segs = 64
-	}
-	// 每段至少 1MB，避免小文件开一堆没用的连接
-	if int64(segs) > size/1024/1024 && size > 1024*1024 {
-		segs = int(size / 1024 / 1024)
-	}
-	if segs < 1 {
-		segs = 1
-	}
-	if size < 8*1024*1024 { // 小文件单流
-		resp.Body.Close()
-		req2, _ := http.NewRequestWithContext(ctx, "GET", j.Source, nil)
-		req2.Header.Set("User-Agent", "Mozilla/5.0 LocalDL/1.0")
-		r2, err := httpClient.Do(req2)
-		if err != nil {
-			setState("error", humanErr(err))
-			return
-		}
-		defer r2.Body.Close()
-		f.Truncate(0)
-		var done int64
-		j.mu.Lock()
-		j.Total = size
-		j.mu.Unlock()
-		buf := make([]byte, 256*1024)
-		for {
-			n, rerr := r2.Body.Read(buf)
-			if n > 0 {
-				f.Write(buf[:n])
-				done += int64(n)
-				j.mu.Lock()
-				j.Done = done
-				j.mu.Unlock()
-			}
-			if rerr != nil {
-				if errors.Is(rerr, io.EOF) {
-					break
-				}
-				if ctx.Err() != nil {
-					setState("paused", "")
-				} else {
-					setState("error", rerr.Error())
-				}
-				f.Close()
-				return
-			}
-		}
-		f.Close()
-		finishJob(j, part, finalPath)
-		return
-	}
-	resp.Body.Close()
+	// ===== 自适应 worker 池 =====
+	// 文件切成 1MB 的块丢队列，worker 从队列抢；worker 数按实测速度动态增加
+	const chunkSize = int64(1 << 20)
+	const maxWorkers = 32
+	startWorkers := 4
 
-	if err := f.Truncate(size); err != nil {
-		f.Close()
-		setState("error", err.Error())
-		return
+	ch := make(chan [2]int64, (size/chunkSize)+2)
+	for from := int64(0); from < size; from += chunkSize {
+		to := from + chunkSize - 1
+		if to >= size {
+			to = size - 1
+		}
+		ch <- [2]int64{from, to}
 	}
+	close(ch)
+
 	j.mu.Lock()
 	j.Total = size
 	j.Done = 0
+	j.Segments = make([]Segment, maxWorkers)
 	j.mu.Unlock()
 
-	var wg sync.WaitGroup
-	var total int64
-	chunk := size / int64(segs)
-	errCh := make(chan error, segs)
+	var (
+		wg     sync.WaitGroup
+		total  int64
+		active int32
+		idSeq  int32
+	)
 
-	j.mu.Lock()
-	j.Segments = make([]Segment, segs)
-	for i := 0; i < segs; i++ {
-		from := int64(i) * chunk
-		to := from + chunk - 1
-		if i == segs-1 {
-			to = size - 1
+	runWorker := func() {
+		defer wg.Done()
+		defer func() {
+			j.mu.Lock()
+			j.Workers--
+			j.mu.Unlock()
+		}()
+		idx := int(atomic.AddInt32(&idSeq, 1) - 1)
+		if idx >= maxWorkers {
+			idx = maxWorkers - 1
 		}
-		j.Segments[i] = Segment{From: from, To: to}
-	}
-	j.mu.Unlock()
-
-	for i := 0; i < segs; i++ {
-		from := int64(i) * chunk
-		to := from + chunk - 1
-		if i == segs-1 {
-			to = size - 1
-		}
-		wg.Add(1)
-		go func(idx int, from, to int64) {
-			defer wg.Done()
-			if err := downloadRange(ctx, j, f, from, to, &total, idx); err != nil {
-				errCh <- err
+		for rng := range ch {
+			if ctx.Err() != nil {
+				return
 			}
-		}(i, from, to)
+			j.mu.Lock()
+			j.Segments[idx] = Segment{From: rng[0], To: rng[1]}
+			j.mu.Unlock()
+			if err := downloadRange(ctx, j, f, rng[0], rng[1], &total, idx); err != nil {
+				return
+			}
+		}
 	}
+
+	spawn := func() {
+		wg.Add(1)
+		atomic.AddInt32(&active, 1)
+		j.mu.Lock()
+		j.Workers++
+		j.mu.Unlock()
+		go runWorker()
+	}
+
+	n := startWorkers
+	if int64(n) > size/chunkSize && size/chunkSize > 0 {
+		n = int(size / chunkSize)
+		if n < 1 {
+			n = 1
+		}
+	}
+	for i := 0; i < n; i++ {
+		spawn()
+	}
+
+	// 自适应：每 3 秒看一次总速度，还在涨就加 worker
+	adaptDone := make(chan struct{})
+	go func() {
+		defer close(adaptDone)
+		t := time.NewTicker(3 * time.Second)
+		defer t.Stop()
+		var prev, prevDelta int64
+		stall := 0
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				cur := atomic.LoadInt64(&total)
+				delta := cur - prev
+				prev = cur
+				if cur >= size {
+					return
+				}
+				a := atomic.LoadInt32(&active)
+				// 比"每轮实际下载量"（等价速度），不是累计量的比例
+				growing := prevDelta > 0 && float64(delta) > float64(prevDelta)*1.10
+				defer func() { prevDelta = delta }()
+				if growing && int(a) < maxWorkers {
+					add := int32(a)
+					if add < 2 {
+						add = 2
+					}
+					for i := int32(0); i < add && atomic.LoadInt32(&active) < maxWorkers; i++ {
+						spawn()
+					}
+					stall = 0
+				} else {
+					if prevDelta > 0 {
+						stall++
+					}
+					if stall >= 2 && a >= int32(startWorkers) {
+						return // 连续两轮速度没长进，认定链路吃满了
+					}
+				}
+			}
+		}
+	}()
+
 	wg.Wait()
 	f.Close()
-	select {
-	case e := <-errCh:
-		if ctx.Err() != nil {
-			setState("paused", "")
-		} else {
-			setState("error", humanErr(e))
-		}
+	if ctx.Err() != nil {
+		setState("paused", "")
 		return
+	}
+	select {
+	case <-adaptDone:
 	default:
+	}
+	if atomic.LoadInt64(&total) < size {
+		setState("error", "连接提前结束，可能被服务器限流")
+		return
 	}
 	finishJob(j, part, finalPath)
 }

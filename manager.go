@@ -24,7 +24,8 @@ type Job struct {
 	Rate     int64     `json:"rate"`
 	FilePath string    `json:"file_path"`
 
-	SegN     int       `json:"seg_n,omitempty"` // 并发分块数（0=默认）
+	SegN     int       `json:"seg_n,omitempty"` // 并发分块数（0=自动）
+	Workers  int       `json:"workers,omitempty"` // 当前活跃连接数（自适应）
 	Segments []Segment `json:"segments,omitempty"`
 
 	ctx    context.Context

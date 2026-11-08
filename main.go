@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
 	webview2 "github.com/pgmsoul/go-webview2"
 )
@@ -22,7 +21,6 @@ import (
 var uiFS embed.FS
 
 var mgr *Manager
-var defaultDirOverride string
 
 func main() {
 	defer func() {
@@ -264,32 +262,3 @@ func orDefault(s, d string) string {
 	return s
 }
 
-func currentDir() string {
-	if defaultDirOverride != "" {
-		return defaultDirOverride
-	}
-	if b, err := os.ReadFile(filepath.Join(mustHome(), ".localdl-dir")); err == nil {
-		if d := strings.TrimSpace(string(b)); d != "" {
-			return d
-		}
-	}
-	d := filepath.Join(mustHome(), "Downloads")
-	os.MkdirAll(d, 0755)
-	return d
-}
-
-func mustHome() string {
-	h, _ := os.UserHomeDir()
-	return h
-}
-
-func saveDefaultDir(d string) {
-	os.WriteFile(filepath.Join(mustHome(), ".localdl-dir"), []byte(d), 0600)
-}
-
-func isDir(p string) bool {
-	st, err := os.Stat(p)
-	return err == nil && st.IsDir()
-}
-
-var _ = time.Second

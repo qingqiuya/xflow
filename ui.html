@@ -116,7 +116,7 @@ async function load(){
     const rate=j.state==='downloading'&&j.rate>0?fs(j.rate)+'/s':'';
     return `<div class="job">
       <div class="hd"><div class="nm" title="${esc(j.source)}">${esc(j.name||j.source)}</div><span class="badge ${bc}">${bt}</span></div>
-      <div class="sub"><span>${fs(j.done)} / ${fs(j.total)}</span>${pct?`<span>${pct.toFixed(1)}%</span>`:''}${rate?`<span style="color:var(--acc)">${rate}</span>`:''}${j.err?`<span style="color:var(--bad)">${esc(j.err)}</span>`:''}</div>
+      <div class="sub"><span>${fs(j.done)} / ${fs(j.total)}</span>${j.workers?`<span>${j.workers} 连接</span>`:''}${pct?`<span>${pct.toFixed(1)}%</span>`:''}${rate?`<span style="color:var(--acc)">${rate}</span>`:''}${j.err?`<span style="color:var(--bad)">${esc(j.err)}</span>`:''}</div>
       <div class="pb ${j.state==='done'?'done':''}"><i style="width:${pct.toFixed(1)}%"></i></div>
       ${(j.segments&&j.segments.length)?`<div class="segs ${j.state==='done'?'done':''}">${j.segments.map(s=>{const tot=s.to-s.from+1;const d=Math.min(100,s.done/tot*100);return `<span><b style="width:${d.toFixed(0)}%"></b></span>`}).join('')}</div>`:''}
       <div class="acts">
