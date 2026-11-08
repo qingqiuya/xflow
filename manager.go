@@ -24,6 +24,7 @@ type Job struct {
 	Rate     int64     `json:"rate"`
 	FilePath string    `json:"file_path"`
 
+	SegN     int       `json:"seg_n,omitempty"` // 并发分块数（0=默认）
 	Segments []Segment `json:"segments,omitempty"`
 
 	ctx    context.Context
@@ -93,7 +94,13 @@ func (m *Manager) save() {
 	os.Rename(tmp, m.stateF)
 }
 
-func (m *Manager) AddHTTP(url, name, dir string) (*Job, error) {
+func (m *Manager) AddHTTP(url, name, dir string, segN int) (*Job, error) {
+	if segN <= 0 {
+		segN = 16
+	}
+	if segN > 64 {
+		segN = 64
+	}
 	if name == "" {
 		name = "download.bin"
 	}
@@ -104,6 +111,7 @@ func (m *Manager) AddHTTP(url, name, dir string) (*Job, error) {
 		Name:    name,
 		Dir:     dir,
 		State:   "queued",
+		SegN:    segN,
 		Created: time.Now(),
 	}
 	j.ctx, j.cancel = context.WithCancel(context.Background())
