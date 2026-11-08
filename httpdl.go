@@ -157,16 +157,29 @@ func startHTTP(j *Job) {
 	// 多段
 	segs := j.SegN
 	if segs <= 0 {
-		segs = 16
+		// 自动：按文件大小分档
+		switch {
+		case size < 8<<20:
+			segs = 1
+		case size < 64<<20:
+			segs = 4
+		case size < 256<<20:
+			segs = 8
+		case size < 2<<30:
+			segs = 16
+		default:
+			segs = 32
+		}
 	}
 	if segs > 64 {
 		segs = 64
 	}
-	if size/1 > 0 && int64(segs) > size/1024/1024 { // 每段至少 1MB
+	// 每段至少 1MB，避免小文件开一堆没用的连接
+	if int64(segs) > size/1024/1024 && size > 1024*1024 {
 		segs = int(size / 1024 / 1024)
-		if segs < 1 {
-			segs = 1
-		}
+	}
+	if segs < 1 {
+		segs = 1
 	}
 	if size < 8*1024*1024 { // 小文件单流
 		resp.Body.Close()
