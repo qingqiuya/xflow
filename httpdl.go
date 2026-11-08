@@ -155,7 +155,19 @@ func startHTTP(j *Job) {
 	}
 
 	// 多段
-	const segs = 8
+	segs := j.SegN
+	if segs <= 0 {
+		segs = 16
+	}
+	if segs > 64 {
+		segs = 64
+	}
+	if size/1 > 0 && int64(segs) > size/1024/1024 { // 每段至少 1MB
+		segs = int(size / 1024 / 1024)
+		if segs < 1 {
+			segs = 1
+		}
+	}
 	if size < 8*1024*1024 { // 小文件单流
 		resp.Body.Close()
 		req2, _ := http.NewRequestWithContext(ctx, "GET", j.Source, nil)
@@ -212,7 +224,7 @@ func startHTTP(j *Job) {
 
 	var wg sync.WaitGroup
 	var total int64
-	chunk := size / segs
+	chunk := size / int64(segs)
 	errCh := make(chan error, segs)
 
 	j.mu.Lock()

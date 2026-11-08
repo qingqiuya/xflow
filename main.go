@@ -55,6 +55,7 @@ func main() {
 				Source string `json:"source"`
 				Name   string `json:"name"`
 				Dir    string `json:"dir"`
+				Segs   int    `json:"segs"`
 			}
 			json.NewDecoder(r.Body).Decode(&d)
 			src := strings.TrimSpace(d.Source)
@@ -69,7 +70,7 @@ func main() {
 			if strings.HasPrefix(src, "magnet:") || strings.HasSuffix(strings.ToLower(src), ".torrent") {
 				mgr.AddBT(src, orDefault(d.Name, "BT 任务"), dir)
 			} else {
-				mgr.AddHTTP(src, orDefault(d.Name, fileNameFromURL(src)), dir)
+				mgr.AddHTTP(src, orDefault(d.Name, fileNameFromURL(src)), dir, d.Segs)
 			}
 			json.NewEncoder(w).Encode(map[string]any{"ok": true})
 			return
@@ -97,7 +98,7 @@ func main() {
 		}
 		dir := currentDir()
 		if j.Kind == "http" {
-			mgr.AddHTTP(j.Source, j.Name, dir)
+			mgr.AddHTTP(j.Source, j.Name, dir, j.SegN)
 		} else {
 			mgr.AddBT(j.Source, j.Name, dir)
 		}
