@@ -1,4 +1,2 @@
-*.exe
-*.jpg
-*.part
-rsrc.syso
+ext-key.pem
+dist/
