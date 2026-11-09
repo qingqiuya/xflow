@@ -1,2 +1,5 @@
+XFlow.exe
+XFlow-Setup.exe
+*.exe
 ext-key.pem
 dist/
