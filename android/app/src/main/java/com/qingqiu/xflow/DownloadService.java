@@ -49,7 +49,7 @@ public class DownloadService extends Service {
     /** 同时下载的任务数 */
     private static final int MAX_TASKS = 4;
     /** 单个任务内的分块线程上限 */
-    private static final int MAX_SEG_THREADS = 8;
+    private static final int MAX_SEG_THREADS = 16;
 
     private static int seq = 1;
     private static ExecutorService pool;
@@ -339,7 +339,11 @@ public class DownloadService extends Service {
 
         j.total = size;
         j.resetSegments();
-        int n = Math.max(1, Math.min(j.segN, MAX_SEG_THREADS));
+        // 大文件自动加段：5G 这类高延迟链路上单连接跑不满带宽，
+        // 1GB 以上直接给到 16 段（小文件没必要，段多了反而碎）
+        int want = j.segN;
+        if (size > 1024L * 1024 * 1024 && want < 16) want = 16;
+        int n = Math.max(1, Math.min(want, MAX_SEG_THREADS));
         long per = size / n;
         for (int i = 0; i < n; i++) {
             long from = i * per;
