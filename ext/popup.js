@@ -1,5 +1,5 @@
 // popup 逻辑：只管开关和端口，重活都在 background.js
-const DEFAULTS = { enabled: true, port: 17777, notify: true, segs: 16 };
+const DEFAULTS = { enabled: true, port: 17777, notify: true, segs: 16, minMB: 1 };
 
 const el = (id) => document.getElementById(id);
 
@@ -8,6 +8,7 @@ async function load() {
   el("enabled").checked = c.enabled !== false;
   el("notify").checked = c.notify !== false;
   el("port").value = c.port || 17777;
+  el("minMB").value = c.minMB === undefined ? 1 : c.minMB;
   test();
 }
 
@@ -43,6 +44,10 @@ el("port").addEventListener("change", (e) => {
     save({ port: v });
     test();
   }
+});
+el("minMB").addEventListener("change", (e) => {
+  const v = parseFloat(e.target.value);
+  if (!isNaN(v) && v >= 0) save({ minMB: v });
 });
 el("retest").addEventListener("click", test);
 
