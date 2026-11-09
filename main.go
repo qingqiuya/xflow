@@ -75,6 +75,58 @@ func main() {
 		}
 		json.NewEncoder(w).Encode(map[string]any{"jobs": mgr.List()})
 	})
+	// 浏览器插件用的入口：带 Referer / Cookie 的下载请求。
+	// 插件在浏览器扩展上下文里 fetch 127.0.0.1，绕开 CORS 限制靠的是 host_permissions，
+	// 但预检还是会来，所以 withCORS 里也放了 Allow-Private-Network。
+	mux.HandleFunc("/api/add", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			http.Error(w, "只收 POST", 405)
+			return
+		}
+		var d struct {
+			URL     string `json:"url"`
+			Name    string `json:"name"`
+			Dir     string `json:"dir"`
+			Referer string `json:"referer"`
+			Cookie  string `json:"cookie"`
+			Segs    int    `json:"segs"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&d); err != nil {
+			json.NewEncoder(w).Encode(map[string]any{"ok": false, "err": "请求体不是合法 JSON"})
+			return
+		}
+		src := strings.TrimSpace(d.URL)
+		if src == "" {
+			json.NewEncoder(w).Encode(map[string]any{"ok": false, "err": "url 为空"})
+			return
+		}
+		dir := d.Dir
+		if dir == "" {
+			dir = currentDir()
+		}
+		name := d.Name
+		if name == "" {
+			name = fileNameFromURL(src)
+		}
+		if strings.HasPrefix(src, "magnet:") || strings.HasSuffix(strings.ToLower(src), ".torrent") {
+			j := mgr.AddBT(src, orDefault(name, "BT 任务"), dir)
+			json.NewEncoder(w).Encode(map[string]any{"ok": true, "id": j.ID})
+			return
+		}
+		h := map[string]string{}
+		if d.Referer != "" {
+			h["Referer"] = d.Referer
+		}
+		if d.Cookie != "" {
+			h["Cookie"] = d.Cookie
+		}
+		j, err := mgr.AddHTTPWithHeaders(src, name, dir, d.Segs, h)
+		if err != nil {
+			json.NewEncoder(w).Encode(map[string]any{"ok": false, "err": err.Error()})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{"ok": true, "id": j.ID, "name": name})
+	})
 	mux.HandleFunc("/api/job/", func(w http.ResponseWriter, r *http.Request) {
 		parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/job/"), "/")
 		id := parts[0]
@@ -218,14 +270,18 @@ func main() {
 		json.NewEncoder(w).Encode(map[string]any{"dir": currentDir()})
 	})
 
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	// 固定端口：插件要知道往哪发，随机端口做不到。17777 被占才退回随机。
+	ln, err := net.Listen("tcp", "127.0.0.1:17777")
 	if err != nil {
-		panic(err)
+		ln, err = net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			panic(err)
+		}
 	}
 	port := ln.Addr().(*net.TCPAddr).Port
-	// 把端口写到文件，方便外部（另一台机器/脚本）调用 API
+	// 把端口写到文件，方便外部（另一台机器/脚本/插件安装说明）调用 API
 	os.WriteFile(filepath.Join(home, ".localdl-port"), []byte(strconv.Itoa(port)), 0644)
-	go http.Serve(ln, mux)
+	go http.Serve(ln, withCORS(mux))
 
 	darkenWindowTitle("XFlow")
 	startTray()

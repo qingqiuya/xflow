@@ -1,6 +1,6 @@
 Unicode true
 !define APPNAME "XFlow"
-!define APPVERSION "1.0.0"
+!define APPVERSION "1.1.0"
 !define PUBLISHER "qingqiuya"
 !define APPEXE "XFlow.exe"
 
@@ -12,7 +12,7 @@ SetCompressor /SOLID lzma
 Icon "app.ico"
 UninstallIcon "app.ico"
 
-VIProductVersion "1.0.0.0"
+VIProductVersion "1.1.0.0"
 VIAddVersionKey "ProductName" "${APPNAME}"
 VIAddVersionKey "FileDescription" "${APPNAME} 下载器"
 VIAddVersionKey "FileVersion" "${APPVERSION}"
@@ -40,10 +40,15 @@ Section "Install"
   SetOutPath "$INSTDIR"
   File "XFlow.exe"
   File "app.ico"
+  ; 浏览器接管插件（不预装，用户到 chrome://extensions 手动加载 unpacked）
+  File /r "ext"
+  File "浏览器插件-安装说明.txt"
 
   CreateDirectory "$SMPROGRAMS\${APPNAME}"
   CreateShortCut "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk" "$INSTDIR\${APPEXE}" "" "$INSTDIR\app.ico" 0
   CreateShortCut "$DESKTOP\${APPNAME}.lnk" "$INSTDIR\${APPEXE}" "" "$INSTDIR\app.ico" 0
+
+  CreateShortCut "$SMPROGRAMS\${APPNAME}\浏览器插件安装说明.lnk" "$INSTDIR\浏览器插件-安装说明.txt"
 
   WriteUninstaller "$INSTDIR\Uninstall.exe"
   CreateShortCut "$SMPROGRAMS\${APPNAME}\卸载 ${APPNAME}.lnk" "$INSTDIR\Uninstall.exe"
@@ -61,8 +66,11 @@ SectionEnd
 Section "Uninstall"
   Delete "$INSTDIR\XFlow.exe"
   Delete "$INSTDIR\app.ico"
+  Delete "$INSTDIR\浏览器插件-安装说明.txt"
+  RMDir /r "$INSTDIR\ext"
   Delete "$INSTDIR\Uninstall.exe"
   RMDir "$INSTDIR"
+  Delete "$SMPROGRAMS\${APPNAME}\浏览器插件安装说明.lnk"
   Delete "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk"
   Delete "$SMPROGRAMS\${APPNAME}\卸载 ${APPNAME}.lnk"
   RMDir "$SMPROGRAMS\${APPNAME}"

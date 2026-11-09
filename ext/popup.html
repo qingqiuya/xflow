@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<style>
+  :root { color-scheme: dark light; }
+  body {
+    width: 280px; margin: 0; padding: 14px 16px 16px;
+    font: 13px/1.5 "Segoe UI", system-ui, sans-serif;
+    background: #1e1f22; color: #e6e6e6;
+  }
+  h1 { margin: 0 0 10px; font-size: 15px; font-weight: 600; letter-spacing: .3px; }
+  .row { display: flex; align-items: center; justify-content: space-between; margin: 10px 0; }
+  .state { font-size: 12px; color: #9aa0a6; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #6b7280; margin-right: 6px; }
+  .dot.on { background: #34d399; }
+  .dot.off { background: #f87171; }
+  label { color: #c9ccd1; }
+  input[type="number"] {
+    width: 74px; padding: 3px 6px; border-radius: 6px;
+    border: 1px solid #3a3d42; background: #2a2c30; color: #e6e6e6;
+  }
+  /* 开关 */
+  .sw { position: relative; width: 40px; height: 22px; }
+  .sw input { opacity: 0; width: 0; height: 0; }
+  .slider {
+    position: absolute; inset: 0; cursor: pointer; border-radius: 22px;
+    background: #4a4d52; transition: .18s;
+  }
+  .slider::before {
+    content: ""; position: absolute; height: 16px; width: 16px; left: 3px; top: 3px;
+    background: #fff; border-radius: 50%; transition: .18s;
+  }
+  .sw input:checked + .slider { background: #2f6fed; }
+  .sw input:checked + .slider::before { transform: translateX(18px); }
+  .hint { font-size: 11px; color: #7f858c; margin-top: 10px; line-height: 1.6; }
+  button {
+    margin-top: 8px; width: 100%; padding: 6px; border-radius: 6px; cursor: pointer;
+    border: 1px solid #3a3d42; background: #2a2c30; color: #e6e6e6;
+  }
+  button:hover { background: #34373c; }
+</style>
+</head>
+<body>
+  <h1>汐流下载器</h1>
+
+  <div class="row">
+    <span class="state"><span id="dot" class="dot"></span><span id="status">检测中…</span></span>
+  </div>
+
+  <div class="row">
+    <label for="enabled">接管浏览器下载</label>
+    <span class="sw"><input type="checkbox" id="enabled"><span class="slider"></span></span>
+  </div>
+
+  <div class="row">
+    <label for="notify">转发后弹提示</label>
+    <span class="sw"><input type="checkbox" id="notify"><span class="slider"></span></span>
+  </div>
+
+  <div class="row">
+    <label for="port">XFlow 端口</label>
+    <input type="number" id="port" min="1" max="65535">
+  </div>
+
+  <button id="retest">重新检测</button>
+
+  <p class="hint">
+    关掉「接管」后，浏览器下载恢复正常。<br>
+    blob:、data:、表单提交产生的下载接不了，会照常由浏览器处理。
+  </p>
+
+<script src="popup.js"></script>
+</body>
+</html>
