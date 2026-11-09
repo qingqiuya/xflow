@@ -26,6 +26,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import xflowmobile.Xflowmobile;
+
 /**
  * 下载服务：分块并发 + 断点续传 + 暂停/继续。
  *
@@ -45,7 +47,7 @@ public class DownloadService extends Service {
     public static final String ACTION_CANCEL = "com.qingqiu.xflow.CANCEL";
 
     /** 同时下载的任务数 */
-    private static final int MAX_TASKS = 2;
+    private static final int MAX_TASKS = 4;
     /** 单个任务内的分块线程上限 */
     private static final int MAX_SEG_THREADS = 8;
 
@@ -61,6 +63,15 @@ public class DownloadService extends Service {
         NotificationManager nm = getSystemService(NotificationManager.class);
         if (nm != null) nm.createNotificationChannel(ch);
         pool = Executors.newFixedThreadPool(MAX_TASKS);
+
+        // BT 引擎（Go + anacrolix/torrent，通过 gomobile 绑定的 AAR）
+        try {
+            File btCache = new File(getCacheDir(), "bt");
+            btCache.mkdirs();
+            Xflowmobile.start(btCache.getAbsolutePath());
+        } catch (Throwable ignored) {
+            // 没有 arm64 lib 或引擎起不来时，HTTP 下载照常
+        }
 
         PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
         if (pm != null) {
@@ -107,10 +118,36 @@ public class DownloadService extends Service {
         if (segN > 16) segN = 16;
         Job j = new Job(String.valueOf(seq++), url, name);
         j.segN = segN;
+
+        // 磁力 / 种子 == 交给 Go 的 BT 引擎，Java 这边只留个影子任务
+        if (isBtSource(url)) {
+            j.kind = "bt";
+            try {
+                j.btId = Xflowmobile.addMagnet(url, downloadDir().getAbsolutePath());
+                j.state = "downloading";
+                synchronized (JOBS) {
+                    JOBS.add(j);
+                }
+            } catch (Throwable e) {
+                j.state = "error";
+                j.err = "BT 引擎： " + e.getMessage();
+                synchronized (JOBS) {
+                    JOBS.add(j);
+                }
+            }
+            return;
+        }
+
         synchronized (JOBS) {
             JOBS.add(j);
         }
         start(j);
+    }
+
+    private static boolean isBtSource(String src) {
+        if (src == null) return false;
+        String s = src.trim().toLowerCase();
+        return s.startsWith("magnet:?") || s.endsWith(".torrent");
     }
 
     private void start(final Job j) {
@@ -129,6 +166,14 @@ public class DownloadService extends Service {
     private void pauseJob(String id) {
         Job j = find(id);
         if (j == null) return;
+        if ("bt".equals(j.kind)) {
+            try {
+                Xflowmobile.pause(j.btId);
+            } catch (Throwable ignored) {
+            }
+            j.state = "paused";
+            return;
+        }
         j.canceled = true;
         if ("downloading".equals(j.state)) j.state = "paused";
     }
@@ -137,12 +182,30 @@ public class DownloadService extends Service {
         Job j = find(id);
         if (j == null) return;
         if ("downloading".equals(j.state) || "queued".equals(j.state)) return;
+        if ("bt".equals(j.kind)) {
+            // Go 侧 Pause 之后不支持恢复同一个 torrent，这里重新加一次（会校验已有数据）
+            try {
+                j.btId = Xflowmobile.addMagnet(j.url, downloadDir().getAbsolutePath());
+                j.state = "downloading";
+                j.err = "";
+            } catch (Throwable e) {
+                j.state = "error";
+                j.err = e.getMessage();
+            }
+            return;
+        }
         start(j);
     }
 
     private void cancelJob(String id) {
         Job j = find(id);
         if (j == null) return;
+        if ("bt".equals(j.kind)) {
+            try {
+                Xflowmobile.remove(j.btId);
+            } catch (Throwable ignored) {
+            }
+        }
         j.canceled = true;
         j.removed = true;
         synchronized (JOBS) {

@@ -20,6 +20,10 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.json.JSONObject;
+
+import xflowmobile.Xflowmobile;
+
 public class MainActivity extends Activity {
 
     private EditText urlEdit, nameEdit;
@@ -62,6 +66,25 @@ public class MainActivity extends Activity {
             List<Job> jobs;
             synchronized (DownloadService.JOBS) {
                 jobs = new ArrayList<>(DownloadService.JOBS);
+            }
+            // BT 任务的真实进度在 Go 引擎里，拉回来同步到影子任务
+            for (Job j : jobs) {
+                if (!"bt".equals(j.kind) || j.btId == null) continue;
+                try {
+                    String raw = Xflowmobile.status(j.btId);
+                    if (raw == null || raw.isEmpty()) continue;
+                    JSONObject o = new JSONObject(raw);
+                    String nm = o.optString("name", "");
+                    if (!nm.isEmpty()) j.name = nm;
+                    j.total = o.optLong("total", j.total);
+                    j.done = o.optLong("done", j.done);
+                    j.speed = o.optLong("speed", 0);
+                    j.err = o.optString("err", "");
+                    String st = o.optString("state", "");
+                    if (!st.isEmpty()) j.state = st;
+                    if (j.path.isEmpty() && j.total > 0) j.path = "";
+                } catch (Throwable ignored) {
+                }
             }
             int active = 0;
             long speed = 0;

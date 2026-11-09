@@ -9,6 +9,8 @@ public class Job {
     public String name;
     public long total;
     public volatile long done;
+    public String kind = "http"; // http / bt（bt 由 Go 引擎跑，这里只是影子）
+    public String btId;          // Go 侧的任务 id
     public String state = "queued"; // queued / downloading / paused / done / error
     public String err = "";
     public String path = "";      // 最终文件
