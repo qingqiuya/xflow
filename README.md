@@ -1,5 +1,7 @@
 # 汐流 XFlow
 
+<img src="assets/icon.png" width="140" align="right" alt="汐流">
+
 Windows 桌面下载器：HTTP 多线程分块 + BT/磁力，外加一个接管浏览器下载的扩展。
 
 界面用 WebView2，下载引擎和一个本地 HTTP API 跑在同一个进程里，单文件 exe、免安装依赖。
