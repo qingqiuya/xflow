@@ -4,6 +4,7 @@ package main
 
 import (
 	"embed"
+	"bytes"
 	"encoding/json"
 	"io"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/anacrolix/torrent/metainfo"
 	webview2 "github.com/pgmsoul/go-webview2"
 )
 
@@ -146,9 +148,19 @@ func main() {
 		}
 		defer f.Close()
 		name := filepath.Base(hdr.Filename)
-		if !strings.HasSuffix(strings.ToLower(name), ".torrent") {
-			json.NewEncoder(w).Encode(map[string]any{"ok": false, "err": "只收 .torrent 文件"})
+		// 不看后缀，解析一遍内容才算数：改过名的一律能收，假的 .torrent 一律拒
+		raw, err := io.ReadAll(io.LimitReader(f, 32<<20))
+		if err != nil {
+			json.NewEncoder(w).Encode(map[string]any{"ok": false, "err": "读文件失败：" + err.Error()})
 			return
+		}
+		mi, err := metainfo.Load(bytes.NewReader(raw))
+		if err != nil {
+			json.NewEncoder(w).Encode(map[string]any{"ok": false, "err": "这不是合法的种子文件（bencode 解析失败）"})
+			return
+		}
+		if info, ierr := mi.UnmarshalInfo(); ierr == nil && info.Name != "" {
+			name = info.Name
 		}
 		// 存到临时文件给 BT 引擎读；引擎是异步的，这里不能马上删
 		tmp, err := os.CreateTemp("", "xflow-*.torrent")
@@ -156,7 +168,7 @@ func main() {
 			json.NewEncoder(w).Encode(map[string]any{"ok": false, "err": "写临时文件失败：" + err.Error()})
 			return
 		}
-		if _, err := io.Copy(tmp, f); err != nil {
+		if _, err := tmp.Write(raw); err != nil {
 			tmp.Close()
 			json.NewEncoder(w).Encode(map[string]any{"ok": false, "err": "保存种子失败：" + err.Error()})
 			return

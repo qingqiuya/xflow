@@ -84,7 +84,7 @@ button:active{transform:scale(.97)}
   <div class="bar-top">
     <span id="stat">就绪</span>
     <span class="grow"></span>
-    <input type="file" id="torrentFile" accept=".torrent" hidden>
+    <input type="file" id="torrentFile" hidden>
     <button class="ghost" id="torrentBtn" title="选一个 .torrent 文件加任务">种子文件</button>
     <button class="ghost" id="dir">下载目录</button>
     <button class="ghost" id="clear">清空已完成</button>
@@ -164,7 +164,7 @@ document.addEventListener('dragover',e=>{e.preventDefault()});
 document.addEventListener('drop',async e=>{
   e.preventDefault();
   const f=e.dataTransfer.files&&e.dataTransfer.files[0];
-  if(!f||!/\.torrent$/i.test(f.name))return;
+  if(!f)return; // 不看后缀，服务端会解析内容，不是种子会退回来
   const fd=new FormData();
   fd.append('file',f);
   const r=await (await fetch('/api/torrent',{method:'POST',body:fd})).json();

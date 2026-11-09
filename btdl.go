@@ -74,15 +74,13 @@ func buildSpec(src, dir string) (*torrent.TorrentSpec, error) {
 		}
 		spec = torrent.TorrentSpecFromMetaInfo(mi)
 
-	case strings.HasSuffix(strings.ToLower(src), ".torrent"):
+	default:
+		// 本地文件：不靠后缀判断，直接试着按种子解析
 		mi, err := metainfo.LoadFromFile(src)
 		if err != nil {
-			return nil, fmt.Errorf("打开种子文件失败：%w", err)
+			return nil, fmt.Errorf("既不是磁力链接也不是种子文件：%s", src)
 		}
 		spec = torrent.TorrentSpecFromMetaInfo(mi)
-
-	default:
-		return nil, fmt.Errorf("BT 源格式不认识：%s", src)
 	}
 
 	if err := os.MkdirAll(dir, 0777); err != nil {
