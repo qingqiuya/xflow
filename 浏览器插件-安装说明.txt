@@ -39,15 +39,14 @@
 
 从别的机器派任务
 ----------------
-汐流监听 0.0.0.0:17777，但只认白名单里的来源，
-名单在 %USERPROFILE%\.localdl-allow（一行一个 CIDR，# 开头是注释）。
-默认只放行本机和 10.11.11.12（家里的 G55）。
+汐流的接口只听本机（127.0.0.1:17777），不对内网开端口。
+别的机器要派任务，走 SSH 到本机再 curl，或者开一条隧道：
 
-派任务的例子：
-
-  curl -X POST http://<这台机器的IP>:17777/api/add \
+  ssh -L 17777:127.0.0.1:17777 <用户名>@<这台机器>
+  # 然后在自己这台机器上：
+  curl -X POST http://127.0.0.1:17777/api/add \
     -H "Content-Type: application/json" \
-    -d '{"url":"https://example.com/big.iso","name":"big.iso","dir":"D:\\Downloads","segs":16}'
+    -d '{"url":"https://example.com/big.iso","name":"big.iso","segs":16}'
 
 字段：url 必填；name 不填就从 URL 推；dir 不填用界面上的默认目录；
 segs 是并发段数（0 或省略 = 16）；referer / cookie 可选，要登录的站点用得上。

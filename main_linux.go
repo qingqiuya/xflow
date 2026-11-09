@@ -81,15 +81,14 @@ func main() {
 		}
 		json.NewEncoder(w).Encode(map[string]any{"ok": true, "id": j.ID})
 	})
-	loadAllowList()
-	ln, err := net.Listen("tcp", ":17777")
+	ln, err := net.Listen("tcp", "127.0.0.1:17777")
 	if err != nil {
-		ln, err = net.Listen("tcp", ":0")
+		ln, err = net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {
 			panic(err)
 		}
 	}
 	fmt.Println("http://127.0.0.1:" + strconv.Itoa(ln.Addr().(*net.TCPAddr).Port))
 	go func() { time.Sleep(time.Hour); os.Exit(0) }()
-	http.Serve(ln, withCORS(withGuard(mux)))
+	http.Serve(ln, withCORS(mux))
 }
