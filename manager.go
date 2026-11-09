@@ -28,6 +28,10 @@ type Job struct {
 	Workers  int       `json:"workers,omitempty"` // 当前活跃连接数（自适应）
 	Segments []Segment `json:"segments,omitempty"`
 
+	// Headers 是外部（浏览器插件）转进来的请求头：Referer / Cookie 之类。
+	// 不带这些，需要登录的站点下回来的是一个 403 页面。
+	Headers map[string]string `json:"headers,omitempty"`
+
 	ctx    context.Context
 	cancel context.CancelFunc
 	mu     sync.Mutex
@@ -96,6 +100,11 @@ func (m *Manager) save() {
 }
 
 func (m *Manager) AddHTTP(url, name, dir string, segN int) (*Job, error) {
+	return m.AddHTTPWithHeaders(url, name, dir, segN, nil)
+}
+
+// AddHTTPWithHeaders 比 AddHTTP 多一组请求头（浏览器插件接管下载时用）。
+func (m *Manager) AddHTTPWithHeaders(url, name, dir string, segN int, headers map[string]string) (*Job, error) {
 	if segN <= 0 {
 		segN = 16
 	}
@@ -113,6 +122,7 @@ func (m *Manager) AddHTTP(url, name, dir string, segN int) (*Job, error) {
 		Dir:     dir,
 		State:   "queued",
 		SegN:    segN,
+		Headers: headers,
 		Created: time.Now(),
 	}
 	j.ctx, j.cancel = context.WithCancel(context.Background())

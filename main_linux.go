@@ -45,8 +45,50 @@ func main() {
 		json.NewEncoder(w).Encode(map[string]any{"jobs": mgr.List()})
 	})
 	_ = httptest.NewRecorder
-	ln, _ := net.Listen("tcp", "127.0.0.1:0")
+	// 与 Windows 版一致的插件入口，本地测下载链路用
+	mux.HandleFunc("/api/add", func(w http.ResponseWriter, r *http.Request) {
+		var d struct {
+			URL     string `json:"url"`
+			Name    string `json:"name"`
+			Dir     string `json:"dir"`
+			Referer string `json:"referer"`
+			Cookie  string `json:"cookie"`
+			Segs    int    `json:"segs"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&d); err != nil {
+			json.NewEncoder(w).Encode(map[string]any{"ok": false, "err": "bad json"})
+			return
+		}
+		dir := d.Dir
+		if dir == "" {
+			dir = currentDir()
+		}
+		name := d.Name
+		if name == "" {
+			name = fileNameFromURL(d.URL)
+		}
+		h := map[string]string{}
+		if d.Referer != "" {
+			h["Referer"] = d.Referer
+		}
+		if d.Cookie != "" {
+			h["Cookie"] = d.Cookie
+		}
+		j, err := mgr.AddHTTPWithHeaders(d.URL, name, dir, d.Segs, h)
+		if err != nil {
+			json.NewEncoder(w).Encode(map[string]any{"ok": false, "err": err.Error()})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{"ok": true, "id": j.ID})
+	})
+	ln, err := net.Listen("tcp", "127.0.0.1:17777")
+	if err != nil {
+		ln, err = net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			panic(err)
+		}
+	}
 	fmt.Println("http://127.0.0.1:" + strconv.Itoa(ln.Addr().(*net.TCPAddr).Port))
 	go func() { time.Sleep(time.Hour); os.Exit(0) }()
-	http.Serve(ln, mux)
+	http.Serve(ln, withCORS(mux))
 }

@@ -41,6 +41,19 @@ func fileNameFromURL(u string) string {
 	return base
 }
 
+// applyHeaders 把插件转进来的头（Referer / Cookie 等）加到请求上。
+// Range 和 User-Agent 属于引擎自己管，不让外部覆盖。
+func applyHeaders(req *http.Request, j *Job) {
+	for k, v := range j.Headers {
+		if strings.EqualFold(k, "Range") || strings.EqualFold(k, "User-Agent") || strings.EqualFold(k, "Host") {
+			continue
+		}
+		if v != "" {
+			req.Header.Set(k, v)
+		}
+	}
+}
+
 func uniquePath(dir, name string) string {
 	p := filepath.Join(dir, name)
 	if _, err := os.Stat(p); os.IsNotExist(err) {
@@ -90,6 +103,7 @@ func startHTTP(j *Job) {
 		return
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 LocalDL/1.0")
+	applyHeaders(req, j)
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		if ctx.Err() != nil {
@@ -296,6 +310,7 @@ func downloadRange(ctx context.Context, j *Job, f *os.File, from, to int64, tota
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 LocalDL/1.0")
 	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", from, to))
+	applyHeaders(req, j)
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return err
