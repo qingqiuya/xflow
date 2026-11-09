@@ -36,3 +36,19 @@
 --------------
 点插件图标，把「接管浏览器下载」关掉即可，随时可再打开。
 右键链接还有一项「用汐流下载此链接」，不影响全局开关。
+
+从别的机器派任务
+----------------
+汐流监听 0.0.0.0:17777，但只认白名单里的来源，
+名单在 %USERPROFILE%\.localdl-allow（一行一个 CIDR，# 开头是注释）。
+默认只放行本机和 10.11.11.12（家里的 G55）。
+
+派任务的例子：
+
+  curl -X POST http://<这台机器的IP>:17777/api/add \
+    -H "Content-Type: application/json" \
+    -d '{"url":"https://example.com/big.iso","name":"big.iso","dir":"D:\\Downloads","segs":16}'
+
+字段：url 必填；name 不填就从 URL 推；dir 不填用界面上的默认目录；
+segs 是并发段数（0 或省略 = 16）；referer / cookie 可选，要登录的站点用得上。
+返回 {"ok":true,"id":"..."}。

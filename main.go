@@ -271,9 +271,11 @@ func main() {
 	})
 
 	// 固定端口：插件要知道往哪发，随机端口做不到。17777 被占才退回随机。
-	ln, err := net.Listen("tcp", "127.0.0.1:17777")
+	// 绑 0.0.0.0 是为了让内网其他机器（G55）也能派任务，来源由 withGuard 控。
+	loadAllowList()
+	ln, err := net.Listen("tcp", ":17777")
 	if err != nil {
-		ln, err = net.Listen("tcp", "127.0.0.1:0")
+		ln, err = net.Listen("tcp", ":0")
 		if err != nil {
 			panic(err)
 		}
@@ -281,7 +283,7 @@ func main() {
 	port := ln.Addr().(*net.TCPAddr).Port
 	// 把端口写到文件，方便外部（另一台机器/脚本/插件安装说明）调用 API
 	os.WriteFile(filepath.Join(home, ".localdl-port"), []byte(strconv.Itoa(port)), 0644)
-	go http.Serve(ln, withCORS(mux))
+	go http.Serve(ln, withCORS(withGuard(mux)))
 
 	darkenWindowTitle("XFlow")
 	startTray()
