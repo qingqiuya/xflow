@@ -55,6 +55,9 @@ public class DownloadService extends Service {
     /** 单个任务内的分块线程上限 */
     private static final int MAX_SEG_THREADS = 16;
 
+    /** BT 引擎的状态/错误，界面会显示出来，方便排查「磁力下不了」 */
+    public static volatile String btEngineState = "未初始化";
+
     private static int seq = 1;
     private static ExecutorService pool;
     private PowerManager.WakeLock wakeLock;
@@ -73,8 +76,10 @@ public class DownloadService extends Service {
             File btCache = new File(getCacheDir(), "bt");
             btCache.mkdirs();
             Xflowmobile.start(btCache.getAbsolutePath());
-        } catch (Throwable ignored) {
-            // 没有 arm64 lib 或引擎起不来时，HTTP 下载照常
+            btEngineState = "就绪";
+        } catch (Throwable e) {
+            // 没有 arm64 lib 或引擎起不来时，HTTP 下载照常，但要把原因说出来
+            btEngineState = "失败：" + e.getClass().getSimpleName() + " " + e.getMessage();
         }
 
         PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
@@ -134,7 +139,8 @@ public class DownloadService extends Service {
                 }
             } catch (Throwable e) {
                 j.state = "error";
-                j.err = "BT 引擎： " + e.getMessage();
+                j.err = "BT 引擎：" + e.getClass().getSimpleName() + " " + e.getMessage()
+                        + "（引擎状态 " + btEngineState + "）";
                 synchronized (JOBS) {
                     JOBS.add(j);
                 }

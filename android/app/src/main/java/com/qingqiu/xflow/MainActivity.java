@@ -94,7 +94,10 @@ public class MainActivity extends Activity {
                     speed += j.speed;
                 }
             }
-            if (jobs.isEmpty()) {
+            if ("失败".length() > 0 && DownloadService.btEngineState.startsWith("失败")) {
+                statText.setText(jobs.isEmpty() ? "BT 引擎异常 · " + DownloadService.btEngineState
+                                                : DownloadService.btEngineState);
+            } else if (jobs.isEmpty()) {
                 statText.setText("还没有任务");
             } else {
                 String s = jobs.size() + " 个任务";

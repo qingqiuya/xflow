@@ -7,6 +7,7 @@ BT=$SDK/build-tools/35.0.0
 PLATFORM=$SDK/platforms/android-37.0/android.jar
 APP=$HOME/xflow-android/app/src/main
 OUT=$HOME/xflow-android/build
+AAR=$HOME/xflow-android/xflowbt.aar
 rm -rf $OUT && mkdir -p $OUT/gen $OUT/classes $OUT/dex
 
 echo "[1/6] 编译资源"
@@ -17,18 +18,25 @@ $BT/aapt2 link -o $OUT/base.apk -I $PLATFORM \
   --manifest $APP/AndroidManifest.xml -R $OUT/res.zip \
   --java $OUT/gen --auto-add-overlay
 
+echo "[2.5/6] 解 AAR（BT 引擎）"
+rm -rf $OUT/aar && mkdir -p $OUT/aar && cd $OUT/aar && unzip -q "$AAR"
+JAR=$OUT/aar/classes.jar
+
 echo "[3/6] javac"
-javac -source 11 -target 11 -encoding UTF-8 -classpath $PLATFORM -d $OUT/classes \
+javac -source 11 -target 11 -encoding UTF-8 -classpath "$PLATFORM:$JAR" -d $OUT/classes \
   $OUT/gen/com/qingqiu/xflow/R.java $APP/java/com/qingqiu/xflow/*.java 2>&1 | grep -v "^警告" || true
 
 echo "[4/6] d8 -> dex"
-$BT/d8 --lib $PLATFORM --min-api 24 --output $OUT/dex $(find $OUT/classes -name "*.class")
+$BT/d8 --lib $PLATFORM --min-api 24 --output $OUT/dex $(find $OUT/classes -name "*.class") "$JAR"
 
 echo "[5/6] 打包 apk"
 cd $OUT && cp base.apk unsigned.apk && cp dex/classes.dex . && zip -q -j unsigned.apk classes.dex
+# Go 的 BT 引擎：libgojni.so 只有 arm64 版
+mkdir -p $OUT/lib/arm64-v8a && cp $OUT/aar/jni/arm64-v8a/libgojni.so $OUT/lib/arm64-v8a/
+zip -q unsigned.apk lib/arm64-v8a/libgojni.so
 
 echo "[6/6] 对齐 + 签名"
-$BT/zipalign -f 4 unsigned.apk aligned.apk
+$BT/zipalign -f -p 4 unsigned.apk aligned.apk
 KS=$HOME/xflow-android/xflow.jks
 if [ ! -f $KS ]; then
   keytool -genkeypair -keystore $KS -alias xflow -keyalg RSA -keysize 2048 \
