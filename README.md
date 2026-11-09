@@ -23,17 +23,29 @@ Windows 桌面下载器：HTTP 多线程分块 + BT/磁力，外加一个接管�
 
 ```bash
 sudo dpkg -i xflow_<版本>_amd64.deb
-xflow --open                     # 起服务并打开浏览器
+xflow                                 # 开原生窗口（WebKitGTK）
+xflow --headless                      # 只跑服务，用浏览器访问
 systemctl --user enable --now xflow   # 登录后自启
 ```
 
-没有原生窗口——跑成一个本地服务，界面在浏览器里开（`http://127.0.0.1:17777`），
-和 Windows 版共用同一套引擎和同一份界面。参数：
+界面是 WebKitGTK 原生窗口，和 Windows 版的 WebView2 是同一份 `ui.html`。
+没装桌面（没有 `DISPLAY`/`WAYLAND_DISPLAY`）时会自动退化成只跑服务。
+
+参数：
 
 ```
-xflow --port 8899      换端口（只绑 127.0.0.1）
-xflow --dir /data/dl   换默认下载目录
-xflow --open           启动后调 xdg-open 打开
+--port 8899      换端口（只绑 127.0.0.1）
+--dir /data/dl   换默认下载目录
+--headless       只跑服务
+--browser        服务起来后交给系统浏览器，不开原生窗口
+```
+
+自己编译 Linux 版要 `libwebkit2gtk-4.1-dev`，并且带上 `pkgconfig/` 那个兼容文件
+（Debian 13 只提供 webkit2gtk-4.1，而 webview_go 写死找 4.0）：
+
+```bash
+sudo apt install libwebkit2gtk-4.1-dev
+PKG_CONFIG_PATH=$PWD/pkgconfig CGO_ENABLED=1 go build -ldflags "-X main.Version=dev" -o xflow .
 ```
 
 ### 浏览器插件
@@ -88,7 +100,7 @@ CGO_ENABLED=0 GOOS=windows GOARCH=amd64 \
 
 ```
 main.go          Windows 入口：界面 + HTTP API + 托盘
-main_linux.go    Linux 入口：纯服务 + 浏览器界面
+main_linux.go    Linux 入口：服务 + WebKitGTK 原生窗口
 manager.go       任务管理（队列、持久化）
 httpdl.go        HTTP 分块下载引擎
 btdl.go          BT 引擎
@@ -102,7 +114,7 @@ wv2/             WebView2 绑定的本地副本（含一处窗口关闭的改动
 - 接管不了 `blob:` / `data:` 生成的下载、POST 表单直接吐文件、流媒体和 DRM
 - BT 是整包下载，还不支持在种子里只挑几个文件；也不做种（下完就断开）
 - 插件在 Chrome/Edge 上只能「加载已解压的扩展」，自签名 crx 会被禁用
-- Linux 版没有原生窗口，是「本地服务 + 浏览器」，功能与 Windows 版一致（除托盘）
+- Linux 版用 WebKitGTK 开窗口（不是 WebView2），没有托盘；没图形界面时退化成 `--headless` 纯服务
 
 ## 许可
 

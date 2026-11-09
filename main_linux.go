@@ -2,16 +2,19 @@
 
 package main
 
-// Linux 版入口：没有原生窗口，跑成一个本地服务 + 用浏览器打开界面。
+// Linux 版入口：本地服务 + 原生窗口（webkit2gtk，靠 webview_go）。
 //
 // 和 Windows 版共用同一套下载引擎（manager / httpdl / btdl）和同一份 ui.html，
-// 区别只在外壳：那边是 WebView2，这边是 127.0.0.1 上的一张网页。
+// 区别只在外壳：那边是 WebView2，这边是 WebKitGTK。
 //
 // 用法：
-//   xflow                 启动，打印地址（不自动开浏览器）
-//   xflow --open          启动并调用 xdg-open 打开界面
-//   xflow --port 8899     换端口
-//   xflow --dir /data/dl  换默认下载目录（会写进配置）
+//   xflow                  起服务并开窗口
+//   xflow --headless       只跑服务（服务器上、或者没图形界面时）
+//   xflow --browser        服务起来后交给系统浏览器（不想要原生窗口时）
+//   xflow --port 8899      换端口
+//   xflow --dir /data/dl   换默认下载目录（写进配置）
+//
+// 没有 DISPLAY / WAYLAND_DISPLAY 时自动退化成 --headless。
 
 import (
 	"bytes"
@@ -29,9 +32,9 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/anacrolix/torrent/metainfo"
+	webview "github.com/webview/webview_go"
 )
 
 //go:embed ui.html
@@ -42,7 +45,8 @@ var mgr *Manager
 func main() {
 	port := flag.Int("port", 17777, "监听端口（只绑 127.0.0.1）")
 	dir := flag.String("dir", "", "默认下载目录")
-	open := flag.Bool("open", false, "启动后打开浏览器")
+	headless := flag.Bool("headless", false, "只跑服务，不开界面")
+	browser := flag.Bool("browser", false, "用系统浏览器打开，不开原生窗口")
 	flag.Parse()
 
 	stateDir := os.Getenv("XFLOW_STATE")
@@ -251,14 +255,8 @@ func main() {
 		fmt.Fprintf(os.Stderr, "监听 %s 失败：%v\n", addr, err)
 		os.Exit(1)
 	}
-	fmt.Printf("汐流 XFlow 已启动：http://%s/\n下载目录：%s\n", addr, currentDir())
-
-	if *open {
-		go func() {
-			time.Sleep(200 * time.Millisecond)
-			exec.Command("xdg-open", "http://"+addr+"/").Start()
-		}()
-	}
+	url := "http://" + addr + "/"
+	fmt.Printf("汐流 XFlow 已启动：%s\n下载目录：%s\n", url, currentDir())
 
 	// 收到 SIGTERM / Ctrl-C 时把任务状态落盘再退
 	go func() {
@@ -270,9 +268,31 @@ func main() {
 		os.Exit(0)
 	}()
 
-	if err := http.Serve(ln, withCORS(mux)); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+	go func() {
+		if err := http.Serve(ln, withCORS(mux)); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	}()
+
+	hasDisplay := os.Getenv("DISPLAY") != "" || os.Getenv("WAYLAND_DISPLAY") != ""
+
+	switch {
+	case *headless || (!hasDisplay && !*browser):
+		fmt.Println("没有图形界面，只跑服务。用浏览器打开上面那个地址就行。")
+		select {}
+	case *browser:
+		exec.Command("xdg-open", url).Start()
+		select {}
+	default:
+		// 原生窗口：webkit2gtk。Run() 会阻塞到窗口关闭。
+		w := webview.New(false)
+		defer w.Destroy()
+		w.SetTitle("汐流 XFlow")
+		w.SetSize(1040, 720, webview.HintNone)
+		w.Navigate(url)
+		w.Run()
+		mgr.save()
 	}
 }
 

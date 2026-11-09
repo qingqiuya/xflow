@@ -17,7 +17,10 @@ STAGE=$(mktemp -d)
 trap 'rm -rf "$STAGE"' EXIT
 
 echo "构建 Linux 二进制 $VER ..."
-CGO_ENABLED=0 GOOS=linux GOARCH=$ARCH \
+# 要用系统 WebKitGTK，必须开 CGO。
+# pkgconfig/ 里那个 webkit2gtk-4.0.pc 是给 Debian 13 用的：
+# 系统只提供 4.1，而 webview_go 写死找 4.0 —— 复制一份改名的照样能链。
+PKG_CONFIG_PATH="$(pwd)/pkgconfig" CGO_ENABLED=1 GOOS=linux GOARCH=$ARCH \
   go build -ldflags "-s -w -X main.Version=$VER" -o "$STAGE/xflow" .
 
 PKG="$STAGE/pkg"
@@ -47,7 +50,7 @@ GenericName=Download Manager
 GenericName[zh_CN]=下载器
 Comment=Multi-threaded downloader (HTTP + BT)
 Comment[zh_CN]=多线程下载器，支持 HTTP 直链和 BT
-Exec=xflow --open
+Exec=xflow
 Icon=xflow
 Terminal=false
 Categories=Network;FileTransfer;
@@ -84,9 +87,11 @@ Maintainer: qingqiuya <noreply@qingqiuya.top>
 Section: net
 Priority: optional
 Homepage: https://github.com/qingqiuya/xflow
+Depends: libwebkit2gtk-4.1-0, libgtk-3-0, libc6 (>= 2.34)
 Description: 汐流 XFlow —— 多线程下载器（HTTP + BT）
  一个本地下载服务：分块并发下 HTTP/HTTPS，也能跑 BT 和磁力。
- 界面在浏览器里打开（http://127.0.0.1:17777），只监听本机回环。
+ 界面是 WebKitGTK 原生窗口；也可以 --headless 只跑服务用浏览器访问。
+ 只监听 127.0.0.1。
 EOF
 
 cat > "$PKG/DEBIAN/postinst" <<'EOF'
@@ -99,12 +104,12 @@ if [ "$1" = "configure" ]; then
 
 汐流 XFlow 已安装。
 
-  手动跑一次：      xflow --open
+  手动跑一次：      xflow
   登录后自启：      systemctl --user enable --now xflow
   开机自启（不等登录）：
       sudo loginctl enable-linger "$USER"
 
-  界面地址：http://127.0.0.1:17777/
+  服务地址：http://127.0.0.1:17777/（--headless 时用浏览器打开）
   默认下载目录：~/Downloads（可在界面里改）
 
 MSG
