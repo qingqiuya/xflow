@@ -166,12 +166,14 @@ chrome.runtime.onInstalled.addListener(() => {
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId !== MENU_ID) return;
   const url = info.linkUrl || info.srcUrl;
-  if (!/^https?:\/\//i.test(url || "")) {
-    await notify("这个链接发不了", "只有 http/https 直链能交给下载器");
+  // 磁力链接浏览器不会当"下载"，只能靠右键菜单送过去
+  if (!/^(https?:\/\/|magnet:\?)/i.test(url || "")) {
+    await notify("这个链接发不了", "只认 http/https 直链和 magnet 磁力链接");
     return;
   }
-  const name = nameFromURL(url);
-  const cookie = await cookieHeader(url);
+  const isMagnet = /^magnet:\?/i.test(url);
+  const name = isMagnet ? "" : nameFromURL(url);
+  const cookie = isMagnet ? "" : await cookieHeader(url);
   try {
     await push(url, name, (tab && tab.url) || "", cookie);
     await notify("已转给汐流", name || url);

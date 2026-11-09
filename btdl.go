@@ -1,13 +1,19 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/anacrolix/torrent"
+	"github.com/anacrolix/torrent/metainfo"
+	"github.com/anacrolix/torrent/storage"
 )
 
 var (
@@ -18,15 +24,72 @@ var (
 	btMu     sync.Mutex
 )
 
-func ensureBT(dir string) error {
+// ensureBT 建全局 client。DataDir 只当临时目录用——
+// 每个种子真正的落地目录在 buildSpec 里单独指定（见下面那段注释）。
+func ensureBT() error {
 	btOnce.Do(func() {
 		cfg := torrent.NewDefaultClientConfig()
-		cfg.DataDir = dir
 		cfg.Seed = false
-		os.MkdirAll(dir, 0755)
+		tmp := filepath.Join(os.TempDir(), "xflow-bt")
+		_ = os.MkdirAll(tmp, 0777)
+		cfg.DataDir = tmp
 		btClient, btErr = torrent.NewClient(cfg)
 	})
 	return btErr
+}
+
+// buildSpec 把三种来源统一成 spec，并把存储目录钉死在这个任务的 dir 上。
+//
+// ★ 为什么不在 client 上设 DataDir：client 是全局单例，DataDir 只有第一份生效，
+// 之后换目录的 BT 任务还是会落到第一个目录里。用 spec.Storage 才是按任务隔离的。
+func buildSpec(src, dir string) (*torrent.TorrentSpec, error) {
+	var spec *torrent.TorrentSpec
+
+	switch {
+	case strings.HasPrefix(src, "magnet:?"):
+		s, err := torrent.TorrentSpecFromMagnetUri(src)
+		if err != nil {
+			return nil, fmt.Errorf("磁力链接解析失败：%w", err)
+		}
+		spec = s
+
+	case strings.HasPrefix(src, "http://"), strings.HasPrefix(src, "https://"):
+		// .torrent 本身是个 http 资源，先拉下来（以前这里直接把 URL 当本地路径，
+		// AddTorrentFromFile 会去 open 一个叫 "https://..." 的文件，必然失败）
+		resp, err := httpClient.Get(src)
+		if err != nil {
+			return nil, fmt.Errorf("下载种子文件失败：%w", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("下载种子文件失败：HTTP %d", resp.StatusCode)
+		}
+		data, err := io.ReadAll(io.LimitReader(resp.Body, 32<<20))
+		if err != nil {
+			return nil, fmt.Errorf("读取种子文件失败：%w", err)
+		}
+		mi, err := metainfo.Load(bytes.NewReader(data))
+		if err != nil {
+			return nil, fmt.Errorf("种子文件解析失败：%w", err)
+		}
+		spec = torrent.TorrentSpecFromMetaInfo(mi)
+
+	case strings.HasSuffix(strings.ToLower(src), ".torrent"):
+		mi, err := metainfo.LoadFromFile(src)
+		if err != nil {
+			return nil, fmt.Errorf("打开种子文件失败：%w", err)
+		}
+		spec = torrent.TorrentSpecFromMetaInfo(mi)
+
+	default:
+		return nil, fmt.Errorf("BT 源格式不认识：%s", src)
+	}
+
+	if err := os.MkdirAll(dir, 0777); err != nil {
+		return nil, fmt.Errorf("建目录失败：%w", err)
+	}
+	spec.Storage = storage.NewFile(dir)
+	return spec, nil
 }
 
 func startBT(j *Job) {
@@ -34,15 +97,12 @@ func startBT(j *Job) {
 	if dir == "" {
 		dir = currentDir()
 	}
-	if err := ensureBT(dir); err != nil {
+	if err := ensureBT(); err != nil {
 		j.mu.Lock()
 		j.State, j.Err = "error", err.Error()
 		j.mu.Unlock()
 		return
 	}
-	j.mu.Lock()
-	j.State, j.Err = "downloading", ""
-	j.mu.Unlock()
 
 	src := j.Source
 	btMu.Lock()
@@ -50,25 +110,29 @@ func startBT(j *Job) {
 	btMu.Unlock()
 
 	if t == nil {
-		var err error
-		switch {
-		case len(src) > 8 && src[:8] == "magnet:?":
-			t, err = btClient.AddMagnet(src)
-		case len(src) > 4 && src[:4] == "http":
-			t, err = btClient.AddTorrentFromFile(src)
-		default:
-			err = fmt.Errorf("BT 源格式不认识")
-		}
+		spec, err := buildSpec(src, dir)
 		if err != nil {
 			j.mu.Lock()
 			j.State, j.Err = "error", err.Error()
 			j.mu.Unlock()
 			return
 		}
+		nt, _, err := btClient.AddTorrentSpec(spec)
+		if err != nil {
+			j.mu.Lock()
+			j.State, j.Err = "error", err.Error()
+			j.mu.Unlock()
+			return
+		}
+		t = nt
 		btMu.Lock()
 		btTors[j.ID] = t
 		btMu.Unlock()
 	}
+
+	j.mu.Lock()
+	j.State, j.Err = "downloading", ""
+	j.mu.Unlock()
 
 	select {
 	case <-t.GotInfo():

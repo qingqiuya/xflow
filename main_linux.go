@@ -67,6 +67,11 @@ func main() {
 		if name == "" {
 			name = fileNameFromURL(d.URL)
 		}
+		if strings.HasPrefix(d.URL, "magnet:") || strings.HasSuffix(strings.ToLower(d.URL), ".torrent") {
+			j := mgr.AddBT(d.URL, name, dir)
+			json.NewEncoder(w).Encode(map[string]any{"ok": true, "id": j.ID})
+			return
+		}
 		h := map[string]string{}
 		if d.Referer != "" {
 			h["Referer"] = d.Referer
