@@ -18,6 +18,10 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
@@ -355,7 +359,11 @@ public class DownloadService extends Service {
 
     /** 并行下各段 */
     private void downloadSegments(Job j) throws Exception {
-        RandomAccessFile raf = new RandomAccessFile(j.partPath, "rw");
+        // 用 FileChannel 的定位写（pwrite 语义）：多个线程写同一个文件的不同区间
+        // 不需要加锁。之前用 RandomAccessFile + synchronized 一把大锁，8 个线程
+        // 每 64KB 抢一次锁，并发根本跑不上去 —— 这是手机端只有人家一半速度的主因。
+        FileChannel ch = FileChannel.open(Paths.get(j.partPath),
+                StandardOpenOption.CREATE, StandardOpenOption.READ, StandardOpenOption.WRITE);
         try {
             AtomicInteger live = new AtomicInteger(0);
             List<Thread> ts = new ArrayList<>();
@@ -365,7 +373,7 @@ public class DownloadService extends Service {
                     live.incrementAndGet();
                     j.workers = live.get();
                     try {
-                        fetchSegment(j, s, raf);
+                        fetchSegment(j, s, ch);
                     } catch (Exception ignored) {
                     } finally {
                         live.decrementAndGet();
@@ -410,12 +418,12 @@ public class DownloadService extends Service {
                 }
             }
         } finally {
-            raf.close();
+            ch.close();
         }
     }
 
     /** 拉一段 */
-    private void fetchSegment(Job j, Segment s, RandomAccessFile raf) throws Exception {
+    private void fetchSegment(Job j, Segment s, FileChannel ch) throws Exception {
         long pos = s.from + s.done;
         while (pos <= s.to) {
             if (j.canceled || j.removed) return;
@@ -433,13 +441,16 @@ public class DownloadService extends Service {
                 if (code == 416) return; // 越界，说明这块其实下完了
                 if (code >= 400) throw new Exception("HTTP " + code);
                 in = c.getInputStream();
-                byte[] buf = new byte[64 * 1024];
+                byte[] buf = new byte[128 * 1024];
                 int n;
                 while ((n = in.read(buf)) > 0) {
                     if (j.canceled || j.removed) return;
-                    synchronized (raf) {
-                        raf.seek(pos);
-                        raf.write(buf, 0, n);
+                    ByteBuffer bb = ByteBuffer.wrap(buf, 0, n);
+                    long wp = pos;
+                    while (bb.hasRemaining()) {
+                        int w = ch.write(bb, wp);
+                        if (w <= 0) break;
+                        wp += w;
                     }
                     pos += n;
                     s.done += n;
@@ -485,7 +496,7 @@ public class DownloadService extends Service {
             raf = new RandomAccessFile(j.partPath, "rw");
             raf.seek(j.done);
             in = c.getInputStream();
-            byte[] buf = new byte[64 * 1024];
+            byte[] buf = new byte[128 * 1024];
             int n;
             long lastT = System.currentTimeMillis();
             long lastDone = j.done;
