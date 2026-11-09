@@ -36,13 +36,13 @@
 <gupdate xmlns='http://www.google.com/update2/response' protocol='2.0'>
   <app appid='jmadiadhfhdgfhmilhckbmdhbkpjplfc'>
     <updatecheck
-      codebase='http://203.0.113.x/path/xflow-ext-1.1.3.crx'
+      codebase='http://example.lan/path/xflow-ext-1.1.3.crx'
       version='1.1.3' />
   </app>
 </gupdate>
 ```
 
-crx 和这个 xml 丢到 NAS 的 hub 文件页（`http://203.0.113.11/...`）或任意内网 HTTP 服务上。
+crx 和这个 xml 丢到任意**能通过 http 访问**的地方（内网文件服务、对象存储都行）。
 **必须是 http/https，不能用 file://**。
 
 ### 2. 写注册表（管理员 PowerShell）
@@ -51,7 +51,7 @@ crx 和这个 xml 丢到 NAS 的 hub 文件页（`http://203.0.113.11/...`）或
 $key = "HKLM:\SOFTWARE\Policies\Google\Chrome\ExtensionInstallForcelist"
 New-Item -Path $key -Force | Out-Null
 New-ItemProperty -Path $key -Name "1" `
-  -Value "jmadiadhfhdgfhmilhckbmdhbkpjplfc;http://203.0.113.x/path/update.xml" `
+  -Value "jmadiadhfhdgfhmilhckbmdhbkpjplfc;http://example.lan/path/update.xml" `
   -PropertyType String -Force
 ```
 
