@@ -4,6 +4,7 @@ package main
 
 import (
 	"encoding/json"
+	"io"
 	"fmt"
 	"net"
 	"net/http"
@@ -43,6 +44,47 @@ func main() {
 			return
 		}
 		json.NewEncoder(w).Encode(map[string]any{"jobs": mgr.List()})
+	})
+
+	// 上传本地 .torrent 文件加任务（界面上「种子文件」按钮走这里）
+	mux.HandleFunc("/api/torrent", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			http.Error(w, "只收 POST", 405)
+			return
+		}
+		if err := r.ParseMultipartForm(16 << 20); err != nil {
+			json.NewEncoder(w).Encode(map[string]any{"ok": false, "err": "表单解析失败：" + err.Error()})
+			return
+		}
+		f, hdr, err := r.FormFile("file")
+		if err != nil {
+			json.NewEncoder(w).Encode(map[string]any{"ok": false, "err": "没收到文件"})
+			return
+		}
+		defer f.Close()
+		name := filepath.Base(hdr.Filename)
+		if !strings.HasSuffix(strings.ToLower(name), ".torrent") {
+			json.NewEncoder(w).Encode(map[string]any{"ok": false, "err": "只收 .torrent 文件"})
+			return
+		}
+		// 存到临时文件给 BT 引擎读；引擎是异步的，这里不能马上删
+		tmp, err := os.CreateTemp("", "xflow-*.torrent")
+		if err != nil {
+			json.NewEncoder(w).Encode(map[string]any{"ok": false, "err": "写临时文件失败：" + err.Error()})
+			return
+		}
+		if _, err := io.Copy(tmp, f); err != nil {
+			tmp.Close()
+			json.NewEncoder(w).Encode(map[string]any{"ok": false, "err": "保存种子失败：" + err.Error()})
+			return
+		}
+		tmp.Close()
+		dir := r.FormValue("dir")
+		if dir == "" {
+			dir = currentDir()
+		}
+		j := mgr.AddBT(tmp.Name(), strings.TrimSuffix(name, filepath.Ext(name)), dir)
+		json.NewEncoder(w).Encode(map[string]any{"ok": true, "id": j.ID, "name": name})
 	})
 	_ = httptest.NewRecorder
 	// 与 Windows 版一致的插件入口，本地测下载链路用

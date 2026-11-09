@@ -84,6 +84,8 @@ button:active{transform:scale(.97)}
   <div class="bar-top">
     <span id="stat">就绪</span>
     <span class="grow"></span>
+    <input type="file" id="torrentFile" accept=".torrent" hidden>
+    <button class="ghost" id="torrentBtn" title="选一个 .torrent 文件加任务">种子文件</button>
     <button class="ghost" id="dir">下载目录</button>
     <button class="ghost" id="clear">清空已完成</button>
     <button class="ghost" id="hide">隐藏到托盘</button>
@@ -146,6 +148,29 @@ $('#add').onclick=async()=>{
   $('#url').value='';$('#name').value='';$('#add').disabled=false;load();
 };
 $('#url').addEventListener('keydown',e=>{if(e.key==='Enter')$('#add').click()});
+$('#torrentBtn').onclick=()=>$('#torrentFile').click();
+$('#torrentFile').onchange=async e=>{
+  const f=e.target.files&&e.target.files[0];
+  if(!f)return;
+  const fd=new FormData();
+  fd.append('file',f);
+  const r=await (await fetch('/api/torrent',{method:'POST',body:fd})).json();
+  e.target.value='';
+  if(!r.ok){alert(r.err||'加不上这个种子');return}
+  load();
+};
+// 拖一个 .torrent 到窗口里也认
+document.addEventListener('dragover',e=>{e.preventDefault()});
+document.addEventListener('drop',async e=>{
+  e.preventDefault();
+  const f=e.dataTransfer.files&&e.dataTransfer.files[0];
+  if(!f||!/\.torrent$/i.test(f.name))return;
+  const fd=new FormData();
+  fd.append('file',f);
+  const r=await (await fetch('/api/torrent',{method:'POST',body:fd})).json();
+  if(!r.ok){alert(r.err||'加不上这个种子');return}
+  load();
+});
 let browsePath='';
 function esc2(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 async function browse(path){
