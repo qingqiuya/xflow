@@ -38,6 +38,15 @@ func main() {
 		}
 	}()
 
+	// 单实例：只允许一个进程。
+	// 以前 alreadyRunning() 写好了却从来没人调用——表面上"只起一个"其实是
+	// 第二个实例抢 17777 端口失败 panic 掉的假象（2026-11-10 清秋发现）。
+	if alreadyRunning() {
+		// 已经有一个在跑：把它的窗口叫到前面来，自己退出
+		showWin()
+		return
+	}
+
 	enableDarkMode()
 
 	home, _ := os.UserHomeDir()
