@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.qingqiuya.xflow"
+    package="top.qingqiuya.xflow"
     android:versionCode="9"
     android:versionName="1.6.1">
 
@@ -34,7 +34,7 @@
             android:foregroundServiceType="dataSync" />
 
         <provider android:name=".FileProviderEx"
-            android:authorities="com.qingqiuya.xflow.fileprovider"
+            android:authorities="top.qingqiuya.xflow.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true" />
     </application>

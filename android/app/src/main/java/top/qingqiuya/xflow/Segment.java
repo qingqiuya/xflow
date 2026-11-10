@@ -1,4 +1,4 @@
-package com.qingqiuya.xflow;
+package top.qingqiuya.xflow;
 
 /** 一段字节区间。from/to 是闭区间。 */
 public class Segment {
