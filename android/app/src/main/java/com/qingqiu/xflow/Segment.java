@@ -5,6 +5,8 @@ public class Segment {
     public long from;
     public long to;
     public volatile long done;
+    /** 这一段连续失败了几次（重试用尽就放弃，别把任务卡在 99%） */
+    public volatile int fails;
 
     public Segment(long from, long to) {
         this.from = from;

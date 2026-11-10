@@ -54,6 +54,8 @@ public class DownloadService extends Service {
     private static final int MAX_TASKS = 4;
     /** 单个任务内的分块线程上限 */
     private static final int MAX_SEG_THREADS = 16;
+    /** 同一段连续失败几次就放弃（read 超时 30s，5 次约 2 分半） */
+    private static final int MAX_SEG_FAILS = 5;
     /** 自适应并发的节奏：跟桌面版 XFlow 1.6.0 一样，每 3 秒主动试一批新连接 */
     private static final long GROW_INTERVAL_MS = 3000;
 
@@ -204,6 +206,7 @@ public class DownloadService extends Service {
 
     private void start(final Job j) {
         j.canceled = false;
+        j.abortError = null;   // 重试/续传时把上次的失败原因清掉
         j.state = "queued";
         pool.submit(() -> {
             try {
@@ -342,6 +345,13 @@ public class DownloadService extends Service {
 
             if (j.removed) {
                 cleanup(j, out);
+                return;
+            }
+            if (j.abortError != null) {
+                // 不是用户暂停，是某段实在拿不到数据：标成 error，保留 .part 可续传
+                saveMeta(j);
+                j.state = "error";
+                j.err = j.abortError;
                 return;
             }
             if (j.canceled) {
@@ -590,7 +600,16 @@ public class DownloadService extends Service {
                     if (pos > s.to) break;
                 }
             } catch (Exception e) {
-                // 网络抖动：歇一下重试，整段最多重试 5 次由外层判断
+                // 网络抖动：歇一下重试。但必须有上限——read 超时是 30 秒，
+                // 没有上限的话一个死段会让任务永远停在 99%（其他段都完了，它还在转）。
+                s.fails++;
+                if (s.fails >= MAX_SEG_FAILS) {
+                    j.abortError = "有一段连续 " + MAX_SEG_FAILS + " 次拿不到数据（"
+                            + e.getClass().getSimpleName() + " " + e.getMessage()
+                            + "），已停下。.part 保留，重试可续传";
+                    j.canceled = true;
+                    return;
+                }
                 Thread.sleep(600);
                 if (pos > s.to) return;
             } finally {

@@ -24,6 +24,8 @@ public class Job {
     public volatile boolean canceled;
     /** 用户要求彻底删掉（连 .part 一起） */
     public volatile boolean removed;
+    /** 非用户意愿的中断原因（某段重试用尽等）；非空就是 error，不是 paused */
+    public volatile String abortError;
 
     public final List<Segment> segs = new ArrayList<>();
 
