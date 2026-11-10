@@ -27,11 +27,37 @@ var trayIconBytes []byte
 // 不碰任何扩展样式、不玩 owner、不装 watcher。
 
 var (
-	procShowWindow2    = modUser32.NewProc("ShowWindow")
-	procSetForeground2 = modUser32.NewProc("SetForegroundWindow")
-	procInvalidateRect = modUser32.NewProc("InvalidateRect")
-	procUpdateWindow   = modUser32.NewProc("UpdateWindow")
+	procCreateWindowEx2 = modUser32.NewProc("CreateWindowExW")
+	procShowWindow2     = modUser32.NewProc("ShowWindow")
+	procSetForeground2  = modUser32.NewProc("SetForegroundWindow")
+	procInvalidateRect  = modUser32.NewProc("InvalidateRect")
+	procUpdateWindow    = modUser32.NewProc("UpdateWindow")
 )
+
+// ownerHwnd 是一个永远不可见的 0x0 窗口（带 WS_EX_TOOLWINDOW）。
+// 把它当主窗口的 owner 传进 CreateWindowExW：Windows 不把「有 owner 的窗口」
+// 放进任务栏，所以主窗口从出生起就不占任务栏，而且不用给主窗口自己设
+// WS_EX_TOOLWINDOW（那会干掉最小化/最大化）。
+// 出处：Wails #5001 —— "create the window with a parent window specified...
+// the child window will get the benefits of WS_EX_TOOLWINDOW without actually
+// needing to use it"，Win10/11 都验证过。
+var ownerHwnd uintptr
+
+func makeOwnerWindow() uintptr {
+	if ownerHwnd != 0 {
+		return ownerHwnd
+	}
+	cls, _ := syscall.UTF16PtrFromString("STATIC")
+	h, _, _ := procCreateWindowEx2.Call(
+		0x80, // WS_EX_TOOLWINDOW
+		uintptr(unsafe.Pointer(cls)), 0,
+		0, // style=0：不显示，也不吃输入
+		0, 0, 0, 0,
+		0, 0, 0, 0,
+	)
+	ownerHwnd = h
+	return h
+}
 
 func findWin() uintptr {
 	tp, _ := syscall.UTF16PtrFromString("XFlow")

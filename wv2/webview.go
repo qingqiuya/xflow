@@ -77,6 +77,12 @@ type WindowOptions struct {
 	// ClassName 窗口类名前缀；库会为每个窗口追加唯一后缀并独立 RegisterClassExW。
 	// 留空则自动生成。
 	ClassName string
+
+	// Owner 指定这个窗口的 owner（对应 CreateWindowExW 的 hWndParent）。
+	// 在 Windows 上：顶层且「无 owner」的窗口可见时会占任务栏；给了 owner 就不占。
+	// 必须在创建时就传进去——事后 SetWindowLongPtr(GWLP_HWNDPARENT) 不生效
+	// （窗口已经进过任务栏了）。Wails 那边验证过这套在 Win10/11 都稳。
+	Owner uintptr
 }
 
 type WebViewOptions struct {
@@ -383,7 +389,7 @@ func (w *webview) CreateWithOptions(opts WindowOptions) bool {
 		uintptr(posY),
 		uintptr(windowWidth),
 		uintptr(windowHeight),
-		0,
+		opts.Owner, // hWndParent：有 owner 的窗口不进任务栏
 		0,
 		uintptr(hinstance),
 		0,
