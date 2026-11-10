@@ -57,14 +57,21 @@ el("retest").addEventListener("click", test);
 async function renderPause() {
   const c = await chrome.storage.local.get(DEFAULTS);
   const btn = el("pause");
+  const forever = c.pauseUntil === -1;
   const left = (c.pauseUntil || 0) - Date.now();
-  if (left > 0) {
+  if (forever) {
+    btn.textContent = "恢复（长期）";
+    btn.style.color = "#f0a020";
+    el("pauseForever").style.color = "#f0a020";
+  } else if (left > 0) {
     const m = Math.ceil(left / 60000);
     btn.textContent = `恢复（剩 ${m} 分）`;
     btn.style.color = "#f0a020";
+    el("pauseForever").style.color = "";
   } else {
     btn.textContent = "暂停";
     btn.style.color = "";
+    el("pauseForever").style.color = "";
   }
 }
 
@@ -73,9 +80,16 @@ el("pauseMin").addEventListener("change", (e) => {
   if (v > 0 && v <= 1440) save({ pauseMin: v });
 });
 
+el("pauseForever").addEventListener("click", async () => {
+  const c = await chrome.storage.local.get(DEFAULTS);
+  const pausing = c.pauseUntil === -1 || (c.pauseUntil || 0) > Date.now();
+  await save({ pauseUntil: pausing ? 0 : -1 });
+  renderPause();
+});
+
 el("pause").addEventListener("click", async () => {
   const c = await chrome.storage.local.get(DEFAULTS);
-  const pausing = (c.pauseUntil || 0) > Date.now();
+  const pausing = c.pauseUntil === -1 || (c.pauseUntil || 0) > Date.now();
   if (pausing) {
     await save({ pauseUntil: 0 });
   } else {
