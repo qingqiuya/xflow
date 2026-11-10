@@ -1,6 +1,6 @@
 Unicode true
 !define APPNAME "XFlow"
-!define APPVERSION "1.1.9"
+!define APPVERSION "1.2.0"
 !define PUBLISHER "qingqiuya"
 !define APPEXE "XFlow.exe"
 
@@ -12,7 +12,7 @@ SetCompressor /SOLID lzma
 Icon "app.ico"
 UninstallIcon "app.ico"
 
-VIProductVersion "1.1.9.0"
+VIProductVersion "1.2.0.0"
 VIAddVersionKey "ProductName" "${APPNAME}"
 VIAddVersionKey "FileDescription" "${APPNAME} 下载器"
 VIAddVersionKey "FileVersion" "${APPVERSION}"
@@ -37,6 +37,13 @@ VIAddVersionKey "LegalCopyright" "© ${PUBLISHER}"
 !insertmacro MUI_LANGUAGE "SimpChinese"
 
 Section "Install"
+  ; 升级安装时先把正在跑的 XFlow 关掉：exe 被占用会导致写入失败，
+  ; 用户会看到「无法打开要写入的文件」。没在跑的话 taskkill 报错也无害。
+  DetailPrint "关闭正在运行的 XFlow…"
+  nsExec::Exec 'taskkill /IM XFlow.exe /F /T'
+  Pop $0
+  Sleep 800
+
   SetOutPath "$INSTDIR"
   File "XFlow.exe"
   File "app.ico"
@@ -64,6 +71,10 @@ Section "Install"
 SectionEnd
 
 Section "Uninstall"
+  DetailPrint "关闭正在运行的 XFlow…"
+  nsExec::Exec 'taskkill /IM XFlow.exe /F /T'
+  Pop $0
+  Sleep 600
   Delete "$INSTDIR\XFlow.exe"
   Delete "$INSTDIR\app.ico"
   Delete "$INSTDIR\浏览器插件-安装说明.txt"

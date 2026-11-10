@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "汐流下载器 · 接管浏览器下载",
-  "version": "1.1.8",
+  "version": "1.1.9",
   "description": "把浏览器的下载转给本机运行的汐流（XFlow）下载器：多线程、断点续传、BT。",
   "permissions": [
     "downloads",
