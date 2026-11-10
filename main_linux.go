@@ -75,6 +75,11 @@ func main() {
 		w.Write(b)
 	})
 
+	// 界面右上角显示版本号，也能给脚本探活用
+	mux.HandleFunc("/api/version", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{"version": Version})
+	})
+
 	mux.HandleFunc("/api/jobs", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "POST" {
 			var d struct {

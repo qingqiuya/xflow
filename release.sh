@@ -17,7 +17,7 @@ BASE="${XFLOW_RELEASE_DIR:-/srv/releases/xflow}"
 DIR="$BASE/$VER"
 
 echo "构建 XFlow $VER ..."
-CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "-H windowsgui -s -w" -o XFlow.exe .
+CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "-H windowsgui -s -w -X main.Version=$VER" -o XFlow.exe .
 rsrc -ico app.ico -manifest app.manifest -o rsrc.syso -arch amd64 2>/dev/null || true
 makensis setup.nsi >/dev/null
 

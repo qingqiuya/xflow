@@ -40,6 +40,9 @@ func showWin() {
 	h := findWin()
 	logTray(fmt.Sprintf("showWin: hwnd=%#x", h))
 	if h != 0 {
+		// 先摘掉 TOOLWINDOW 再显示：工具窗口的标题栏只有 ×，
+		// 没有最小化/最大化按钮（清秋报的第二个 bug 就是这个）
+		clearToolWindow()
 		procShowWindow2.Call(h, 5) // SW_SHOW
 		procShowWindow2.Call(h, 9) // SW_RESTORE
 		procSetForeground2.Call(h)
@@ -52,6 +55,15 @@ func logTray(msg string) {
 	if err == nil {
 		fmt.Fprintf(f, "%s %s\n", time.Now().Format("15:04:05"), msg)
 		f.Close()
+	}
+}
+
+// clearToolWindow 恢复成普通窗口（有最小化/最大化、进任务栏）
+func clearToolWindow() {
+	h := findWin()
+	if h != 0 {
+		ex, _, _ := procGetWindowLong2.Call(h, gwlExStyle)
+		procSetWindowLong2.Call(h, gwlExStyle, ex&^wsExToolwindow)
 	}
 }
 
