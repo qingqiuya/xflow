@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync/atomic"
 	"syscall"
 	"time"
 	"unsafe"
@@ -46,6 +47,10 @@ var gwlpHwndParent = ^uintptr(7)
 // 标题栏按钮也不受影响。
 var ownerHwnd uintptr
 
+// userWantsVisible：用户点了托盘「显示窗口」就 true，点 × / 启动隐藏就 false。
+// 常驻 watcher 靠它判断「偷偷冒出来的窗口要不要按回去」。
+var userWantsVisible atomic.Bool
+
 func ensureOwner() {
 	if ownerHwnd != 0 {
 		return
@@ -69,6 +74,7 @@ func findWin() uintptr {
 }
 
 func showWin() {
+	userWantsVisible.Store(true)
 	h := findWin()
 	logTray(fmt.Sprintf("showWin: hwnd=%#x", h))
 	if h != 0 {
@@ -131,6 +137,7 @@ func markToolWindow() {
 // Raymond Chen 的规则：顶层且无主（unowned）的窗口，只要可见就占任务栏。
 // 所以按 pid 枚举、逐个 SW_HIDE 才是干净做法。
 func hideWin() {
+	userWantsVisible.Store(false)
 	n := 0
 	pid := uint32(os.Getpid())
 	enumCallbackPtr = syscall.NewCallback(func(h, l uintptr) uintptr {
@@ -173,8 +180,23 @@ func rehideVisible() {
 	procEnumWindows.Call(cb, 0)
 }
 
+// startWindowWatcher 常驻守护：WebView2 随时可能把宿主窗口 ShowWindow 回来
+// （首帧渲染完、Navigate 完成、或者它自己想重绘），蹲 3 秒不够，
+// 所以干脆每秒检查一次，只要用户没点「显示窗口」就一律按回去。
+func startWindowWatcher() {
+	go func() {
+		for {
+			time.Sleep(1 * time.Second)
+			if !userWantsVisible.Load() {
+				rehideVisible()
+			}
+		}
+	}()
+}
+
 // startTray 用独立的消息循环做托盘，不碰 WebView2 的窗口过程
 func startTray() {
+	startWindowWatcher()
 	go func() {
 		runtime.LockOSThread()
 		systray.Run(func() {
