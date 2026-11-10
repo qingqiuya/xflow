@@ -1,4 +1,4 @@
-package com.qingqiu.xflow;
+package com.qingqiuya.xflow;
 
 import android.app.Activity;
 import android.content.Intent;

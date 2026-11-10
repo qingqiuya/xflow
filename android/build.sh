@@ -55,7 +55,7 @@ JAR=$OUT/aar/classes.jar
 
 echo "[3/6] javac"
 javac -source 11 -target 11 -encoding UTF-8 -classpath "$PLATFORM:$JAR" -d $OUT/classes \
-  $OUT/gen/com/qingqiu/xflow/R.java $APP/java/com/qingqiu/xflow/*.java 2>&1 | grep -v "^警告" || true
+  $OUT/gen/com/qingqiuya/xflow/R.java $APP/java/com/qingqiuya/xflow/*.java 2>&1 | grep -v "^警告" || true
 
 echo "[4/6] d8 -> dex"
 $BT/d8 --lib "$PLATFORM" --min-api 24 --output $OUT/dex $(find $OUT/classes -name "*.class") "$JAR"

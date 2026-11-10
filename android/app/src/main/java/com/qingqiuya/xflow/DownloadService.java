@@ -1,4 +1,4 @@
-package com.qingqiu.xflow;
+package com.qingqiuya.xflow;
 
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -45,10 +45,10 @@ public class DownloadService extends Service {
 
     public static final String CHANNEL = "xflow_dl";
     public static final List<Job> JOBS = new ArrayList<>();
-    public static final String ACTION_ADD = "com.qingqiu.xflow.ADD";
-    public static final String ACTION_PAUSE = "com.qingqiu.xflow.PAUSE";
-    public static final String ACTION_RESUME = "com.qingqiu.xflow.RESUME";
-    public static final String ACTION_CANCEL = "com.qingqiu.xflow.CANCEL";
+    public static final String ACTION_ADD = "com.qingqiuya.xflow.ADD";
+    public static final String ACTION_PAUSE = "com.qingqiuya.xflow.PAUSE";
+    public static final String ACTION_RESUME = "com.qingqiuya.xflow.RESUME";
+    public static final String ACTION_CANCEL = "com.qingqiuya.xflow.CANCEL";
 
     /** 同时下载的任务数 */
     private static final int MAX_TASKS = 4;
