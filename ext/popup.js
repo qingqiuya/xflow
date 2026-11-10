@@ -1,6 +1,5 @@
 // popup 逻辑：只管开关和端口，重活都在 background.js
-const DEFAULTS = { enabled: true, port: 17777, notify: true, segs: 16, minMB: 1, pauseUntil: 0 };
-const PAUSE_MS = 30 * 60 * 1000; // 点一下暂停 30 分钟，到点自动恢复
+const DEFAULTS = { enabled: true, port: 17777, notify: true, segs: 16, minMB: 1, pauseUntil: 0, pauseMin: 30 };
 
 const el = (id) => document.getElementById(id);
 
@@ -10,6 +9,7 @@ async function load() {
   el("notify").checked = c.notify !== false;
   el("port").value = c.port || 17777;
   el("minMB").value = c.minMB === undefined ? 1 : c.minMB;
+  el("pauseMin").value = c.pauseMin || 30;
   renderPause();
   test();
 }
@@ -53,7 +53,7 @@ el("minMB").addEventListener("change", (e) => {
 });
 el("retest").addEventListener("click", test);
 
-// 暂停按钮：没暂停 → 暂停 30 分钟；正在暂停 → 恢复
+// 暂停按钮：没暂停 → 按下拉里填的分钟数暂停；正在暂停 → 恢复
 async function renderPause() {
   const c = await chrome.storage.local.get(DEFAULTS);
   const btn = el("pause");
@@ -63,15 +63,25 @@ async function renderPause() {
     btn.textContent = `恢复（剩 ${m} 分）`;
     btn.style.color = "#f0a020";
   } else {
-    btn.textContent = "30 分钟";
+    btn.textContent = "暂停";
     btn.style.color = "";
   }
 }
 
+el("pauseMin").addEventListener("change", (e) => {
+  const v = parseInt(e.target.value, 10);
+  if (v > 0 && v <= 1440) save({ pauseMin: v });
+});
+
 el("pause").addEventListener("click", async () => {
   const c = await chrome.storage.local.get(DEFAULTS);
   const pausing = (c.pauseUntil || 0) > Date.now();
-  await save({ pauseUntil: pausing ? 0 : Date.now() + PAUSE_MS });
+  if (pausing) {
+    await save({ pauseUntil: 0 });
+  } else {
+    const mins = parseInt(el("pauseMin").value, 10) || 30;
+    await save({ pauseUntil: Date.now() + mins * 60000, pauseMin: mins });
+  }
   renderPause();
 });
 

@@ -54,8 +54,12 @@
   </div>
 
   <div class="row">
-    <label for="pause">临时暂停接管</label>
-    <button id="pause" style="width:auto;margin:0;padding:4px 10px">30 分钟</button>
+    <label for="pauseMin">暂停接管</label>
+    <span style="display:flex;gap:4px;align-items:center">
+      <input type="number" id="pauseMin" min="1" max="1440" step="1" value="30">
+      <span style="font-size:11px;color:#7f858c">分钟</span>
+      <button id="pause" style="width:auto;margin:0;padding:4px 10px">暂停</button>
+    </span>
   </div>
 
   <div class="row">
