@@ -19,9 +19,16 @@ import (
 var trayIconBytes []byte
 
 var (
-	procShowWindow2 = modUser32.NewProc("ShowWindow")
+	procShowWindow2    = modUser32.NewProc("ShowWindow")
 	procSetForeground2 = modUser32.NewProc("SetForegroundWindow")
+	procGetWindowLong2 = modUser32.NewProc("GetWindowLongPtrW")
+	procSetWindowLong2 = modUser32.NewProc("SetWindowLongPtrW")
 )
+
+const wsExToolwindow = 0x00000080 // 工具窗口：不进任务栏、不进 Alt+Tab
+
+// GWL_EXSTYLE = -20。go vet 不允许常量 -20 直接转 uintptr，所以用补码当变量存
+var gwlExStyle = ^uintptr(19)
 
 func findWin() uintptr {
 	tp, _ := syscall.UTF16PtrFromString("XFlow")
@@ -48,10 +55,23 @@ func logTray(msg string) {
 	}
 }
 
+// markToolWindow 只设扩展样式，不动可见性
+func markToolWindow() {
+	h := findWin()
+	if h != 0 {
+		ex, _, _ := procGetWindowLong2.Call(h, gwlExStyle)
+		procSetWindowLong2.Call(h, gwlExStyle, ex|wsExToolwindow)
+	}
+}
+
 func hideWin() {
 	h := findWin()
 	logTray(fmt.Sprintf("hideWin: hwnd=%#x", h))
 	if h != 0 {
+		// 先标成工具窗口再藏：光 SW_HIDE 时任务栏偶尔会留个残影/闪一下，
+		// 加了 WS_EX_TOOLWINDOW 就从系统层面保证它不属于任务栏。
+		ex, _, _ := procGetWindowLong2.Call(h, gwlExStyle)
+		procSetWindowLong2.Call(h, gwlExStyle, ex|wsExToolwindow)
 		procShowWindow2.Call(h, 6) // SW_HIDE
 	}
 }

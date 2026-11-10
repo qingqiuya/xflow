@@ -173,7 +173,14 @@ func startHTTP(j *Job) {
 	// 文件切成 1MB 的块丢队列，worker 从队列抢；worker 数按实测速度动态增加
 	const chunkSize = int64(1 << 20)
 	const maxWorkers = 32
-	startWorkers := 4
+	// 起始并发取界面上选的段数（以前这里写死 4，选 16 也不生效）
+	startWorkers := j.SegN
+	if startWorkers <= 0 {
+		startWorkers = 8
+	}
+	if startWorkers > maxWorkers {
+		startWorkers = maxWorkers
+	}
 
 	ch := make(chan [2]int64, (size/chunkSize)+2)
 	for from := int64(0); from < size; from += chunkSize {
@@ -264,7 +271,10 @@ func startHTTP(j *Job) {
 				a := atomic.LoadInt32(&active)
 				// 比"每轮实际下载量"（等价速度），不是累计量的比例
 				growing := prevDelta > 0 && float64(delta) > float64(prevDelta)*1.10
-				defer func() { prevDelta = delta }()
+				// ★ 这里原来写的是 defer func(){ prevDelta = delta }()，
+				// 在循环里 defer 要等函数返回才执行 ⇒ prevDelta 永远 0，
+				// growing 永远 false，自适应等于没写。改成普通赋值。
+				prevDelta = delta
 				if growing && int(a) < maxWorkers {
 					add := int32(a)
 					if add < 2 {

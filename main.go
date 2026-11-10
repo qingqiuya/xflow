@@ -3,11 +3,11 @@
 package main
 
 import (
-	"embed"
 	"bytes"
+	"embed"
 	"encoding/json"
-	"io"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -37,7 +37,6 @@ func main() {
 			}
 		}
 	}()
-
 
 	enableDarkMode()
 
@@ -287,7 +286,9 @@ func main() {
 	})
 
 	mux.HandleFunc("/api/setdir", func(w http.ResponseWriter, r *http.Request) {
-		var d struct{ Dir string `json:"dir"` }
+		var d struct {
+			Dir string `json:"dir"`
+		}
 		json.NewDecoder(r.Body).Decode(&d)
 		if d.Dir != "" && isDir(d.Dir) {
 			defaultDirOverride = d.Dir
@@ -314,7 +315,9 @@ func main() {
 
 	mux.HandleFunc("/api/dir", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "POST" {
-			var d struct{ Dir string `json:"dir"` }
+			var d struct {
+				Dir string `json:"dir"`
+			}
 			json.NewDecoder(r.Body).Decode(&d)
 			if d.Dir != "" {
 				defaultDirOverride = d.Dir
@@ -354,9 +357,9 @@ func main() {
 		AutoFocus: true,
 		DataPath:  filepath.Join(home, ".localdl-webview"),
 		WindowOptions: webview2.WindowOptions{
-			Title:  "XFlow",
-			Width:  1000,
-			Height: 700,
+			Title:   "XFlow",
+			Width:   1000,
+			Height:  700,
 			Default: true,
 		},
 		OnClose: func(w webview2.WebView) {
@@ -374,10 +377,13 @@ func main() {
 	if startHidden {
 		// 自启模式：等窗口建好就藏到托盘，任务栏不留图标
 		go func() {
-			for i := 0; i < 40; i++ {
-				time.Sleep(100 * time.Millisecond)
+			for i := 0; i < 60; i++ {
+				time.Sleep(50 * time.Millisecond)
 				if findWin() != 0 {
-					time.Sleep(400 * time.Millisecond)
+					// 立刻标成工具窗口：那一刻任务栏图标就没了，
+					// 再稍等让 WebView2 把首帧画完，然后彻底藏起来
+					markToolWindow()
+					time.Sleep(150 * time.Millisecond)
 					hideWin()
 					return
 				}
@@ -393,4 +399,3 @@ func orDefault(s, d string) string {
 	}
 	return s
 }
-
