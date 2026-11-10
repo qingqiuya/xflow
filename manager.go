@@ -37,6 +37,10 @@ type Job struct {
 	mu     sync.Mutex
 	lastD  int64
 	lastT  time.Time
+
+	// abortErr 非空表示不是因为用户取消才停的（比如某段反复拿不到数据）。
+	// 主循环见到它就报 error 而不是 paused。
+	abortErr string
 }
 
 type Segment struct {

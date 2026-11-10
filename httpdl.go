@@ -70,6 +70,39 @@ func uniquePath(dir, name string) string {
 	return p
 }
 
+const (
+	// 同一段连续失败几次就放弃整个任务
+	maxRangeAttempts = 3
+)
+
+// 一个连接多久没有任何新数据就认定它死了（read 本身可能永远不返回）。
+// 用变量而不是常量，方便测试里调小。
+var rangeStallTimeout = 30 * time.Second
+
+// withStallWatch 给一次请求加看门狗：超过 timeout 没有任何进展就 cancel。
+// 返回的 *atomic.Int64 由调用方每次读到数据时 Store(now)。
+func withStallWatch(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc, *atomic.Int64) {
+	rctx, cancel := context.WithCancel(ctx)
+	var last atomic.Int64
+	last.Store(time.Now().UnixNano())
+	go func() {
+		t := time.NewTicker(timeout / 6)
+		defer t.Stop()
+		for {
+			select {
+			case <-rctx.Done():
+				return
+			case <-t.C:
+				if time.Since(time.Unix(0, last.Load())) > timeout {
+					cancel()
+					return
+				}
+			}
+		}
+	}()
+	return rctx, cancel, &last
+}
+
 func startHTTP(j *Job) {
 	ctx := j.ctx
 	dir := j.Dir
@@ -136,10 +169,15 @@ func startHTTP(j *Job) {
 		j.Total = size
 		j.Done = 0
 		j.mu.Unlock()
+		// 单流也要看门狗：TCP 活着但一个字节不吐时 Read 会永远阻塞
+		sctx, scancel, last := withStallWatch(ctx, rangeStallTimeout)
+		defer scancel()
+		_ = sctx
 		buf := make([]byte, 256*1024)
 		for {
 			n, rerr := resp.Body.Read(buf)
 			if n > 0 {
+				last.Store(time.Now().UnixNano())
 				if _, werr := f.Write(buf[:n]); werr != nil {
 					f.Close()
 					setState("error", werr.Error())
@@ -155,9 +193,12 @@ func startHTTP(j *Job) {
 					break
 				}
 				f.Close()
-				if ctx.Err() != nil {
+				switch {
+				case ctx.Err() != nil:
 					setState("paused", "")
-				} else {
+				case sctx.Err() != nil:
+					setState("error", fmt.Sprintf("%d 秒没收到数据，连接已弃用", int(rangeStallTimeout.Seconds())))
+				default:
 					setState("error", rerr.Error())
 				}
 				return
@@ -223,8 +264,28 @@ func startHTTP(j *Job) {
 			j.mu.Lock()
 			j.Segments[idx] = Segment{From: rng[0], To: rng[1]}
 			j.mu.Unlock()
-			if err := downloadRange(ctx, j, f, rng[0], rng[1], &total, idx); err != nil {
-				return
+			// 一段卡住不能把整个任务拖死：失败就从断点重试，试完就收手、把原因写出去。
+			cur := rng[0]
+			for attempt := 1; ; attempt++ {
+				next, err := downloadRange(ctx, j, f, cur, rng[1], &total, idx)
+				cur = next
+				if err == nil {
+					break
+				}
+				if ctx.Err() != nil {
+					return
+				}
+				if attempt >= maxRangeAttempts {
+					j.mu.Lock()
+					j.abortErr = fmt.Sprintf("有一段连续 %d 次拿不到数据（%v），已停下；.part 保留，重试可续传",
+						maxRangeAttempts, err)
+					j.mu.Unlock()
+					if j.cancel != nil {
+						j.cancel()
+					}
+					return
+				}
+				time.Sleep(time.Duration(attempt) * 700 * time.Millisecond)
 			}
 		}
 	}
@@ -309,6 +370,13 @@ func startHTTP(j *Job) {
 
 	wg.Wait()
 	f.Close()
+	j.mu.Lock()
+	abortMsg := j.abortErr
+	j.mu.Unlock()
+	if abortMsg != "" {
+		setState("error", abortMsg)
+		return
+	}
 	if ctx.Err() != nil {
 		setState("paused", "")
 		return
@@ -323,29 +391,37 @@ func startHTTP(j *Job) {
 	finishJob(j, part, finalPath)
 }
 
-func downloadRange(ctx context.Context, j *Job, f *os.File, from, to int64, total *int64, idx int) error {
-	req, err := http.NewRequestWithContext(ctx, "GET", j.Source, nil)
+func downloadRange(ctx context.Context, j *Job, f *os.File, from, to int64, total *int64, idx int) (int64, error) {
+	// 这一段单独一个可取消的 ctx：TCP 连着但一个字节不吐时，Read 可能永远阻塞。
+	rctx, rcancel, last := withStallWatch(ctx, rangeStallTimeout)
+	defer rcancel()
+
+	req, err := http.NewRequestWithContext(rctx, "GET", j.Source, nil)
 	if err != nil {
-		return err
+		return from, err
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 LocalDL/1.0")
 	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", from, to))
 	applyHeaders(req, j)
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return err
+		if rctx.Err() != nil && ctx.Err() == nil {
+			return from, fmt.Errorf("%d 秒没有任何数据，连接弃用", int(rangeStallTimeout.Seconds()))
+		}
+		return from, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 206 && resp.StatusCode != 200 {
-		return fmt.Errorf("HTTP %d", resp.StatusCode)
+		return from, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 	buf := make([]byte, 256*1024)
 	off := from
 	for {
 		n, rerr := resp.Body.Read(buf)
 		if n > 0 {
+			last.Store(time.Now().UnixNano())
 			if _, werr := f.WriteAt(buf[:n], off); werr != nil {
-				return werr
+				return off, werr
 			}
 			off += int64(n)
 			d := atomic.AddInt64(total, int64(n))
@@ -358,9 +434,12 @@ func downloadRange(ctx context.Context, j *Job, f *os.File, from, to int64, tota
 		}
 		if rerr != nil {
 			if errors.Is(rerr, io.EOF) {
-				return nil
+				return off, nil
 			}
-			return rerr
+			if rctx.Err() != nil && ctx.Err() == nil {
+				return off, fmt.Errorf("%d 秒没有任何数据，连接弃用", int(rangeStallTimeout.Seconds()))
+			}
+			return off, rerr
 		}
 	}
 }
