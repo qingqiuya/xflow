@@ -5,8 +5,13 @@
 package xflowmobile
 
 import (
+	"crypto/sha1"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -39,6 +44,9 @@ var (
 	tasks = map[string]*task{}
 	tkMu  sync.Mutex
 	seq   int64
+	// metaRoot 是 Start 传进来的引擎目录。BT 自己的数据库（完成度 .torrent.db）
+	// 必须放这里，不能落到用户看得见的下载目录里。
+	metaRoot string
 )
 
 // Start 初始化 BT 客户端。dataDir 是 .torrent 元数据的临时落点，
@@ -52,6 +60,7 @@ func Start(dataDir string) error {
 	if dataDir == "" {
 		dataDir = "/data/data/com.qingqiu.xflow/cache/bt"
 	}
+	metaRoot = dataDir
 	cfg := torrent.NewDefaultClientConfig()
 	cfg.DataDir = dataDir
 	cfg.Seed = false
@@ -109,15 +118,41 @@ func buildSpec(src, dir string) (*torrent.TorrentSpec, error) {
 		}
 		spec = s
 	default:
-		mi, err := metainfo.LoadFromFile(src)
+		mi, err := loadMetaInfo(src)
 		if err != nil {
 			return nil, fmt.Errorf("不是可用的种子来源：%w", err)
 		}
 		spec = torrent.TorrentSpecFromMetaInfo(mi)
 	}
-	// 每个任务用自己的存储根，别都塞到 client 的 DataDir 里
-	spec.Storage = storage.NewFile(dir)
+	// 每个任务用自己的存储根，别都塞到 client 的 DataDir 里。
+	// 完成度数据库（.torrent.db / -shm / -wal）要指到引擎目录：默认那套会直接
+	// 生成在下载目录里，用户看得见的文件夹就脏了。按任务算个名字，避免多任务
+	// 抢同一个 bolt 库。
+	key := fmt.Sprintf("%x", sha1.Sum([]byte(dir+"|"+src)))[:16]
+	pc, err := storage.NewBoltPieceCompletion(filepath.Join(metaRoot, "pc-"+key))
+	if err != nil {
+		pc = storage.NewMapPieceCompletion() // 建库失败就退化成内存，功能不受影响
+	}
+	spec.Storage = storage.NewFileWithCompletion(dir, pc)
 	return spec, nil
+}
+
+// loadMetaInfo 支持本地 .torrent 文件和 http(s) 的 .torrent 链接（桌面版 1.1.4 起就是这样）。
+// 以前 Android 端直接 metainfo.LoadFromFile，传 URL 进来会报 "no such file or directory"。
+func loadMetaInfo(src string) (*metainfo.MetaInfo, error) {
+	if strings.HasPrefix(src, "http://") || strings.HasPrefix(src, "https://") {
+		client := &http.Client{Timeout: 30 * time.Second}
+		resp, err := client.Get(src)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != 200 {
+			return nil, fmt.Errorf("下载种子失败：HTTP %d", resp.StatusCode)
+		}
+		return metainfo.Load(io.LimitReader(resp.Body, 32<<20))
+	}
+	return metainfo.LoadFromFile(src)
 }
 
 func run(tk *task) {
