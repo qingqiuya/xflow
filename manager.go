@@ -217,6 +217,20 @@ func (m *Manager) Remove(id string) {
 	if j != nil && j.cancel != nil {
 		j.cancel()
 	}
+	// 取消后把没下完的临时文件一起清掉：只删 .part，已完成的正式文件不动。
+	// 给 cancel() 一点时间让下载协程退出并关掉句柄，否则 Windows 上删不掉。
+	if j != nil && j.State != "done" && j.FilePath != "" {
+		part := j.FilePath + ".part"
+		go func() {
+			for i := 0; i < 20; i++ {
+				time.Sleep(150 * time.Millisecond)
+				if err := os.Remove(part); err == nil || os.IsNotExist(err) {
+					os.Remove(part + ".meta")
+					return
+				}
+			}
+		}()
+	}
 	m.mu.Lock()
 	delete(m.jobs, id)
 	for i, v := range m.order {
