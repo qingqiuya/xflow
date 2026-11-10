@@ -25,12 +25,42 @@ var (
 	procSetWindowLong2 = modUser32.NewProc("SetWindowLongPtrW")
 	procInvalidateRect = modUser32.NewProc("InvalidateRect")
 	procUpdateWindow   = modUser32.NewProc("UpdateWindow")
+	procEnumWindows    = modUser32.NewProc("EnumWindows")
+	procCreateWindowEx = modUser32.NewProc("CreateWindowExW")
+	procGetWindowPid2  = modUser32.NewProc("GetWindowThreadProcessId")
+	procIsWindowVis    = modUser32.NewProc("IsWindowVisible")
+	enumCallbackPtr    uintptr // 回调必须留个引用，被 GC 回收会崩
 )
 
 const wsExToolwindow = 0x00000080 // 工具窗口：不进任务栏、不进 Alt+Tab
 
 // GWL_EXSTYLE = -20。go vet 不允许常量 -20 直接转 uintptr，所以用补码当变量存
 var gwlExStyle = ^uintptr(19)
+
+// GWLP_HWNDPARENT = -8：给窗口挂 owner 用
+var gwlpHwndParent = ^uintptr(7)
+
+// ownerHwnd 是一个不可见的 0x0 STATIC 窗口。
+// 微软文档给的替代方案：不设 WS_EX_TOOLWINDOW（那会干掉最小化/最大化），
+// 而是「建一个隐藏窗口当可见窗口的 owner」——有 owner 的顶层窗口不进任务栏，
+// 标题栏按钮也不受影响。
+var ownerHwnd uintptr
+
+func ensureOwner() {
+	if ownerHwnd != 0 {
+		return
+	}
+	cls, _ := syscall.UTF16PtrFromString("STATIC")
+	h, _, _ := procCreateWindowEx.Call(
+		0, uintptr(unsafe.Pointer(cls)), 0,
+		0,          // 不带 WS_VISIBLE，创建即不可见
+		0, 0, 0, 0, // 0x0
+		0, 0, 0, 0,
+	)
+	if h != 0 {
+		ownerHwnd = h
+	}
+}
 
 func findWin() uintptr {
 	tp, _ := syscall.UTF16PtrFromString("XFlow")
@@ -64,6 +94,18 @@ func logTray(msg string) {
 	}
 }
 
+// attachOwner 给主窗口挂上隐藏 owner，从此它不进任务栏
+func attachOwner() {
+	ensureOwner()
+	if ownerHwnd == 0 {
+		return
+	}
+	if h := findWin(); h != 0 {
+		procSetWindowLong2.Call(h, gwlpHwndParent, ownerHwnd)
+		logTray(fmt.Sprintf("attachOwner: main=%#x owner=%#x", h, ownerHwnd))
+	}
+}
+
 // clearToolWindow 恢复成普通窗口（有最小化/最大化、进任务栏）
 func clearToolWindow() {
 	h := findWin()
@@ -82,12 +124,28 @@ func markToolWindow() {
 	}
 }
 
+// hideWin 把本进程所有「可见的顶层窗口」全藏起来。
+//
+// 为什么不能只藏 findWin 找到的那个：WebView2 里还有个 Chrome_WidgetWin_1
+// 顶层窗口，光藏外壳它照样挂在任务栏上（清秋报的「点 × 之后任务栏还在」）。
+// Raymond Chen 的规则：顶层且无主（unowned）的窗口，只要可见就占任务栏。
+// 所以按 pid 枚举、逐个 SW_HIDE 才是干净做法。
 func hideWin() {
-	h := findWin()
-	logTray(fmt.Sprintf("hideWin: hwnd=%#x", h))
-	if h != 0 {
-		procShowWindow2.Call(h, 6) // SW_HIDE
-	}
+	n := 0
+	pid := uint32(os.Getpid())
+	enumCallbackPtr = syscall.NewCallback(func(h, l uintptr) uintptr {
+		var wpid uint32
+		procGetWindowPid2.Call(h, uintptr(unsafe.Pointer(&wpid)))
+		if wpid == pid {
+			if v, _, _ := procIsWindowVis.Call(h); v != 0 {
+				procShowWindow2.Call(h, 6) // SW_HIDE
+				n++
+			}
+		}
+		return 1 // 继续枚举
+	})
+	procEnumWindows.Call(enumCallbackPtr, 0)
+	logTray(fmt.Sprintf("hideWin: 藏了 %d 个可见窗口", n))
 }
 
 // startTray 用独立的消息循环做托盘，不碰 WebView2 的窗口过程

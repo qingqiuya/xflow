@@ -379,6 +379,8 @@ func main() {
 	}
 	defer w.Destroy()
 	w.Navigate("http://127.0.0.1:" + strconv.Itoa(port))
+	attachOwner()
+
 	if startHidden {
 		// 自启模式：等窗口建好就藏到托盘，任务栏不留图标
 		go func() {

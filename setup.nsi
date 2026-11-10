@@ -1,6 +1,6 @@
 Unicode true
 !define APPNAME "XFlow"
-!define APPVERSION "1.2.7"
+!define APPVERSION "1.2.9"
 !define PUBLISHER "qingqiuya"
 !define APPEXE "XFlow.exe"
 
@@ -12,7 +12,7 @@ SetCompressor /SOLID lzma
 Icon "app.ico"
 UninstallIcon "app.ico"
 
-VIProductVersion "1.2.7.0"
+VIProductVersion "1.2.9.0"
 VIAddVersionKey "ProductName" "${APPNAME}"
 VIAddVersionKey "FileDescription" "${APPNAME} 下载器"
 VIAddVersionKey "FileVersion" "${APPVERSION}"
