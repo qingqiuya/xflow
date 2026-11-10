@@ -54,6 +54,8 @@ public class DownloadService extends Service {
     private static final int MAX_TASKS = 4;
     /** 单个任务内的分块线程上限 */
     private static final int MAX_SEG_THREADS = 16;
+    /** 自适应并发的节奏：跟桌面版 XFlow 1.6.0 一样，每 3 秒主动试一批新连接 */
+    private static final long GROW_INTERVAL_MS = 3000;
 
     /** BT 引擎的状态/错误，界面会显示出来，方便排查「磁力下不了」 */
     public static volatile String btEngineState = "未初始化";
@@ -129,8 +131,33 @@ public class DownloadService extends Service {
         j.segN = segN;
 
         // 磁力 / 种子 == 交给 Go 的 BT 引擎，Java 这边只留个影子任务
-        if (isBtSource(url)) {
+        boolean bt = isBtSource(url);
+        if (!bt && url.startsWith("/") && new File(url).isFile()) {
+            // 本地文件不看后缀：能解析成种子的就当 BT 任务（桌面版就是这么干的）
+            try {
+                Xflowmobile.validate(url);
+                bt = true;
+            } catch (Throwable ignored) {
+                bt = false;
+            }
+        }
+        if (bt) {
             j.kind = "bt";
+            // 本地种子先按内容校验一遍（跟桌面版一样不看后缀）：
+            // 改过名的合法种子能进，文本改后缀的假种子直接拒。
+            if (url.startsWith("/")) {
+                try {
+                    String real = Xflowmobile.validate(url);
+                    if (real != null && !real.isEmpty()) j.name = real;
+                } catch (Throwable e) {
+                    j.state = "error";
+                    j.err = "种子校验失败：" + e.getMessage();
+                    synchronized (JOBS) {
+                        JOBS.add(j);
+                    }
+                    return;
+                }
+            }
             try {
                 j.btId = Xflowmobile.addMagnet(url, downloadDir().getAbsolutePath());
                 j.state = "downloading";
@@ -138,6 +165,21 @@ public class DownloadService extends Service {
                     JOBS.add(j);
                 }
             } catch (Throwable e) {
+                String msg = String.valueOf(e.getMessage());
+                // 链接叫 xxx.torrent、但内容根本不是种子的情况（或拿不到种子）：
+                // 降级当普通直链下载，用户至少能把那个 .torrent 文件拿下来，
+                // 之后再用「选种子文件」加载。
+                if (msg.contains("不是可用的种子来源")
+                        && (url.startsWith("http://") || url.startsWith("https://"))) {
+                    j.kind = "http";
+                    j.state = "queued";
+                    j.err = "";
+                    synchronized (JOBS) {
+                        JOBS.add(j);
+                    }
+                    start(j);
+                    return;
+                }
                 j.state = "error";
                 j.err = "BT 引擎：" + e.getClass().getSimpleName() + " " + e.getMessage()
                         + "（引擎状态 " + btEngineState + "）";
@@ -210,10 +252,23 @@ public class DownloadService extends Service {
     private void cancelJob(String id) {
         Job j = find(id);
         if (j == null) return;
+        boolean running = "downloading".equals(j.state) || "queued".equals(j.state);
         if ("bt".equals(j.kind)) {
             try {
                 Xflowmobile.remove(j.btId);
             } catch (Throwable ignored) {
+            }
+            // Go 的 remove 只把种子从客户端里拿掉，已经落盘的数据不删，这里补上：
+            // 没下完的 BT 任务点删除就把它的文件/目录一起清了（下完的不碰）。
+            if (j.done < j.total && j.name != null && !j.name.isEmpty()) {
+                final File victim = new File(downloadDir(), j.name);
+                new Thread(() -> {
+                    try {
+                        Thread.sleep(1200); // 等引擎把文件句柄放掉
+                    } catch (InterruptedException ignored) {
+                    }
+                    deleteTree(victim);
+                }).start();
             }
         }
         j.canceled = true;
@@ -221,7 +276,20 @@ public class DownloadService extends Service {
         synchronized (JOBS) {
             JOBS.remove(j);
         }
-        // 线程退出后再删文件，这里只标记；清理放在 download 的 finally
+        // 还在跑的任务由 download() 的 finally 负责清；其余状态（暂停/出错/没启动过）
+        // 不会再有代码走到那里，只能在这里删，否则 .part 永远躺在目录里。
+        if (!running) cleanup(j, new File(j.path == null ? "" : j.path));
+    }
+
+    /** 递归删文件/目录（BT 的多文件任务会落成一个目录） */
+    private void deleteTree(File f) {
+        if (f == null || !f.exists()) return;
+        if (f.isDirectory()) {
+            File[] kids = f.listFiles();
+            if (kids != null) for (File k : kids) deleteTree(k);
+        }
+        //noinspection ResultOfMethodCallIgnored
+        f.delete();
     }
 
     private Job find(String id) {
@@ -307,7 +375,7 @@ public class DownloadService extends Service {
             c = (HttpURLConnection) new URL(j.url).openConnection();
             c.setConnectTimeout(15000);
             c.setReadTimeout(20000);
-            c.setRequestProperty("User-Agent", "XFlow/1.1 (Android)");
+            c.setRequestProperty("User-Agent", "XFlow/1.6.0 (Android)");
             c.setRequestProperty("Range", "bytes=0-0");
             c.setInstanceFollowRedirects(true);
             c.connect();
@@ -363,7 +431,14 @@ public class DownloadService extends Service {
         j.done = 0;
     }
 
-    /** 并行下各段 */
+    /**
+     * 并行下各段：worker 池 + 自适应增长（跟桌面版 XFlow 1.6.0 的 TCP 慢启动一致）。
+     *
+     * 段先按 16 份切好，worker 从队列里领：领一段、下完再领下一段。
+     * 起始只开 segN 个 worker，然后每 3 秒主动试一批新的 —— 速度涨了继续加，
+     * 连着两轮加了没效果就认定带宽吃满，停手（上限 16）。
+     * 老逻辑是「有几个段就一次全开」，慢链路上一上来就把连接数拉满，反而互相抢。
+     */
     private void downloadSegments(Job j) throws Exception {
         // 用 FileChannel 的定位写（pwrite 语义）：多个线程写同一个文件的不同区间
         // 不需要加锁。之前用 RandomAccessFile + synchronized 一把大锁，8 个线程
@@ -371,27 +446,50 @@ public class DownloadService extends Service {
         FileChannel ch = FileChannel.open(Paths.get(j.partPath),
                 StandardOpenOption.CREATE, StandardOpenOption.READ, StandardOpenOption.WRITE);
         try {
-            AtomicInteger live = new AtomicInteger(0);
-            List<Thread> ts = new ArrayList<>();
-            for (Segment s : j.segs) {
-                if (s.remaining() <= 0) continue;
+            final AtomicInteger live = new AtomicInteger(0);
+            final AtomicInteger nextSeg = new AtomicInteger(0);
+            final List<Thread> ts = new ArrayList<>();
+            final Object lock = new Object();
+
+            // 一个 worker：领一段、下完再领下一段；领不到就退出
+            final Runnable spawn = () -> {
+                final int seq = ts.size();
                 Thread t = new Thread(() -> {
                     live.incrementAndGet();
                     j.workers = live.get();
                     try {
-                        fetchSegment(j, s, ch);
-                    } catch (Exception ignored) {
+                        while (!j.canceled && !j.removed) {
+                            int i = nextSeg.getAndIncrement();
+                            if (i >= j.segs.size()) break;
+                            Segment s = j.segs.get(i);
+                            if (s.remaining() <= 0) continue;
+                            try {
+                                fetchSegment(j, s, ch);
+                            } catch (Exception ignored) {
+                            }
+                        }
                     } finally {
                         live.decrementAndGet();
                         j.workers = live.get();
                     }
-                }, "seg-" + j.id);
-                ts.add(t);
+                }, "seg-" + j.id + "-" + seq);
+                synchronized (lock) {
+                    ts.add(t);
+                }
                 t.start();
-            }
-            // 主循环：更新进度、速度、通知，顺便盯暂停
+            };
+
+            // 起始并发取任务给的段数；自适应会自己往上摸
+            int start = Math.max(1, Math.min(j.segN, MAX_SEG_THREADS));
+            for (int i = 0; i < start; i++) spawn.run();
+
+            // 主循环：更新进度、速度、通知，顺便盯暂停 + 自适应
             long lastT = System.currentTimeMillis();
             long lastDone = j.done;
+            long growAt = lastT + GROW_INTERVAL_MS;
+            long prevSpeed = 0;
+            int added = 0;
+            int stall = 0;
             while (true) {
                 boolean allDone = true;
                 long sum = 0;
@@ -410,17 +508,46 @@ public class DownloadService extends Service {
                             j.name + " · " + human(j.done) + " / " + human(j.total)
                                     + " · " + human(j.speed) + "/s", pct);
                 }
+
+                // 自适应：上一批加过就验收，速度涨 5% 以上算有效，连着两轮无效就收手
+                if (now >= growAt) {
+                    if (added > 0) {
+                        boolean grew = prevSpeed > 0 && j.speed > prevSpeed * 1.05;
+                        if (grew) stall = 0;
+                        else stall++;
+                    }
+                    int size;
+                    synchronized (lock) {
+                        size = ts.size();
+                    }
+                    if (stall < 2 && size < MAX_SEG_THREADS && !allDone) {
+                        int addN = Math.max(1, added);
+                        for (int i = 0; i < addN && size < MAX_SEG_THREADS; i++, size++) {
+                            spawn.run();
+                            added++;
+                        }
+                        prevSpeed = j.speed;
+                    }
+                    growAt = now + GROW_INTERVAL_MS;
+                }
+
                 if (j.canceled) {
-                    for (Thread t : ts) t.interrupt();
+                    synchronized (lock) {
+                        for (Thread t : ts) t.interrupt();
+                    }
                     break;
                 }
-                if (allDone) break;
+                if (allDone && live.get() == 0) break;
+                // 线程都退了却还有段没下完（领到段就异常退出）：补一个，别卡死
+                if (live.get() == 0 && !allDone) spawn.run();
                 Thread.sleep(200);
             }
-            for (Thread t : ts) {
-                try {
-                    t.join(3000);
-                } catch (InterruptedException ignored) {
+            synchronized (lock) {
+                for (Thread t : ts) {
+                    try {
+                        t.join(3000);
+                    } catch (InterruptedException ignored) {
+                    }
                 }
             }
         } finally {
@@ -439,7 +566,7 @@ public class DownloadService extends Service {
                 c = (HttpURLConnection) new URL(j.url).openConnection();
                 c.setConnectTimeout(15000);
                 c.setReadTimeout(30000);
-                c.setRequestProperty("User-Agent", "XFlow/1.1 (Android)");
+                c.setRequestProperty("User-Agent", "XFlow/1.6.0 (Android)");
                 c.setRequestProperty("Range", "bytes=" + pos + "-" + s.to);
                 c.setInstanceFollowRedirects(true);
                 c.connect();

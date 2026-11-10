@@ -17,6 +17,8 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -40,7 +42,20 @@ public class MainActivity extends Activity {
         jobList = findViewById(R.id.jobList);
         statText = findViewById(R.id.statText);
 
+        // 副标题后面跟版本号：直接从包信息里读，不另外硬编码
+        TextView sub = findViewById(R.id.subText);
+        if (sub != null) {
+            try {
+                String v = getPackageManager()
+                        .getPackageInfo(getPackageName(), 0).versionName;
+                sub.setText("汐流 · 把文件带下来 · v" + v);
+            } catch (Exception ignored) {
+            }
+        }
+
         Button add = findViewById(R.id.addBtn);
+        Button torrentBtn = findViewById(R.id.torrentBtn);
+        torrentBtn.setOnClickListener(v -> pickTorrent());
         add.setOnClickListener(v -> {
             String url = urlEdit.getText().toString().trim();
             if (TextUtils.isEmpty(url)) {
@@ -58,6 +73,60 @@ public class MainActivity extends Activity {
         });
 
         ui.post(render);
+    }
+
+    // ---------------------------------------------------------------- 种子文件
+
+    private static final int REQ_TORRENT = 4001;
+
+    private void pickTorrent() {
+        Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.setType("*/*");   // 很多机器上 application/x-bittorrent 不认，就放宽一点
+        try {
+            startActivityForResult(i, REQ_TORRENT);
+        } catch (Exception e) {
+            Toast.makeText(this, "没有可用的文件选择器", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int req, int res, Intent data) {
+        super.onActivityResult(req, res, data);
+        if (req != REQ_TORRENT || res != RESULT_OK || data == null || data.getData() == null) return;
+        Uri uri = data.getData();
+        try {
+            File dir = new File(getCacheDir(), "torrent");
+            dir.mkdirs();
+            // 复制到 App 私有目录再交给引擎：跨进程读 content:// 不可靠，
+            // 而且引擎要的是本地路径。文件名带 .torrent，引擎会按种子解析。
+            File out = new File(dir, "picked-" + System.currentTimeMillis() + ".torrent");
+            try (InputStream in = getContentResolver().openInputStream(uri);
+                 FileOutputStream fo = new FileOutputStream(out)) {
+                byte[] buf = new byte[64 * 1024];
+                int n;
+                while ((n = in.read(buf)) > 0) fo.write(buf, 0, n);
+            }
+            // 先按内容校验一遍（桌面版 1.1.6 同款）：改过名的合法种子能进，
+            // 文本改后缀的假种子当场拒，不建任务。
+            String title;
+            try {
+                title = Xflowmobile.validate(out.getAbsolutePath());
+            } catch (Throwable e) {
+                out.delete();
+                Toast.makeText(this, e.getMessage() == null ? "这不是合法的种子文件" : e.getMessage(),
+                        Toast.LENGTH_LONG).show();
+                return;
+            }
+            Intent svc = new Intent(this, DownloadService.class);
+            svc.setAction(DownloadService.ACTION_ADD);
+            svc.putExtra("url", out.getAbsolutePath());
+            svc.putExtra("name", title);
+            startForegroundService(svc);
+            Toast.makeText(this, "已加入：" + title, Toast.LENGTH_SHORT).show();
+        } catch (Exception e) {
+            Toast.makeText(this, "读不到这个文件：" + e.getMessage(), Toast.LENGTH_SHORT).show();
+        }
     }
 
     private final Runnable render = new Runnable() {
@@ -123,7 +192,7 @@ public class MainActivity extends Activity {
     private View buildRow(Job j) {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setBackgroundColor(0xFF171A21);
+        box.setBackgroundResource(R.drawable.card_bg);
         box.setPadding(dp(12), dp(10), dp(12), dp(10));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -150,12 +219,20 @@ public class MainActivity extends Activity {
         box.addView(pb, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, dp(6)));
 
+        // 分段条：每段一格，能看出哪段在跑、哪段卡住（跟桌面版一样分段看进度）
+        LinearLayout segBar = new LinearLayout(this);
+        segBar.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams segLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(5));
+        segLp.topMargin = dp(3);
+        box.addView(segBar, segLp);
+
         // 操作按钮
         LinearLayout ops = new LinearLayout(this);
         ops.setOrientation(LinearLayout.HORIZONTAL);
         ops.setPadding(0, dp(8), 0, 0);
         Button pause = smallButton("暂停");
-        Button cancel = smallButton("取消");
+        Button cancel = smallButton("删除");
         Button open = smallButton("打开");
         ops.addView(pause);
         ops.addView(cancel);
@@ -176,11 +253,16 @@ public class MainActivity extends Activity {
             i.putExtra("id", j.id);
             i.setAction(DownloadService.ACTION_CANCEL);
             startForegroundService(i);
+            if ("done".equals(j.state) || "error".equals(j.state)) {
+                Toast.makeText(this, "任务已删除，文件留在 Download 目录", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(this, "已删除，没下完的部分也清掉了", Toast.LENGTH_SHORT).show();
+            }
         });
 
         open.setOnClickListener(v -> openFile(j));
 
-        box.setTag(new Object[]{meta, pb, pause, open});
+        box.setTag(new Object[]{meta, pb, pause, open, segBar, cancel});
         updateRow(box, j);
         return box;
     }
@@ -190,7 +272,7 @@ public class MainActivity extends Activity {
         b.setText(text);
         b.setTextSize(12);
         b.setAllCaps(false);
-        b.setBackgroundColor(0xFF22262F);
+        b.setBackgroundResource(R.drawable.btn_small_bg);
         b.setTextColor(0xFFC9D2E3);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 0, dp(34), 1f);
@@ -206,6 +288,8 @@ public class MainActivity extends Activity {
         ProgressBar pb = (ProgressBar) tag[1];
         Button pause = (Button) tag[2];
         Button open = (Button) tag[3];
+        LinearLayout segBar = tag.length > 4 ? (LinearLayout) tag[4] : null;
+        Button cancelBtn = tag.length > 5 ? (Button) tag[5] : null;
 
         pb.setProgress(j.percent());
         String state = j.state;
@@ -239,7 +323,14 @@ public class MainActivity extends Activity {
         if ("downloading".equals(j.state) && j.speed > 0) {
             sb.append(" · ").append(DownloadService.human(j.speed)).append("/s");
         }
-        if (j.segs.size() > 1) sb.append(" · ").append(j.segs.size()).append(" 段");
+        if ("bt".equals(j.kind)) {
+            sb.append(" · BT");
+        } else if ("downloading".equals(j.state) && j.workers > 0) {
+            // 自适应的时候段数是死的（16 份），真正在变的是并发线程数，就显示它
+            sb.append(" · ").append(j.workers).append(" 并发");
+        } else if (j.segs.size() > 1) {
+            sb.append(" · ").append(j.segs.size()).append(" 段");
+        }
         if (!j.err.isEmpty()) sb.append(" · ").append(j.err);
         meta.setText(sb.toString());
 
@@ -251,8 +342,47 @@ public class MainActivity extends Activity {
             pb.setProgressTintList(android.content.res.ColorStateList.valueOf(0xFF4CC2FF));
         }
 
+        // 分段条：每段一小格，满了变绿，正在跑的是蓝色
+        if (segBar != null) {
+            try {
+                int n = j.segs.size();
+                if (n <= 1) {
+                    segBar.setVisibility(View.GONE);
+                } else {
+                    segBar.setVisibility(View.VISIBLE);
+                    if (segBar.getChildCount() != n) {
+                        segBar.removeAllViews();
+                        for (int i = 0; i < n; i++) {
+                            ProgressBar sp = new ProgressBar(this, null,
+                                    android.R.attr.progressBarStyleHorizontal);
+                            sp.setMax(100);
+                            sp.setProgressBackgroundTintList(
+                                    android.content.res.ColorStateList.valueOf(0xFF0B0E13));
+                            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(5), 1f);
+                            lp.rightMargin = (i == n - 1) ? 0 : dp(2);
+                            segBar.addView(sp, lp);
+                        }
+                    }
+                    for (int i = 0; i < n; i++) {
+                        Segment sg = j.segs.get(i);
+                        ProgressBar sp = (ProgressBar) segBar.getChildAt(i);
+                        int pct = sg.size() <= 0 ? 100 : (int) (sg.done * 100 / sg.size());
+                        sp.setProgress(Math.max(0, Math.min(100, pct)));
+                        sp.setProgressTintList(android.content.res.ColorStateList.valueOf(
+                                pct >= 100 ? 0xFF3DDC84 : 0xFF4CC2FF));
+                    }
+                }
+            } catch (IndexOutOfBoundsException ignored) {
+                // pause/resume 时段表可能正在重建，下一帧再说
+            }
+        }
+
         pause.setText("downloading".equals(j.state) || "queued".equals(j.state) ? "暂停" : "继续");
         pause.setEnabled(!"done".equals(j.state));
+        // 统一叫「删除」（清秋 2026-11-10：取消改叫删除）
+        if (cancelBtn != null) {
+            cancelBtn.setText("删除");
+        }
         open.setEnabled("done".equals(j.state) && !j.path.isEmpty());
     }
 

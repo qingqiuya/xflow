@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -64,6 +65,10 @@ func Start(dataDir string) error {
 	cfg := torrent.NewDefaultClientConfig()
 	cfg.DataDir = dataDir
 	cfg.Seed = false
+	// 默认端口是写死的 42069，撞上残留 socket 或别的 app 就是
+	// "listen tcp4 :42069: bind: address already in use"，BT 整个起不来。
+	// 手机上没必有固定端口（不靠外部主动连入），直接交给系统挑。
+	cfg.ListenPort = 0
 	c, err := torrent.NewClient(cfg)
 	if err != nil {
 		return err
@@ -153,6 +158,37 @@ func loadMetaInfo(src string) (*metainfo.MetaInfo, error) {
 		return metainfo.Load(io.LimitReader(resp.Body, 32<<20))
 	}
 	return metainfo.LoadFromFile(src)
+}
+
+// Validate 校验一个本地种子文件：能解析就返回种子里的真实名字，否则报错。
+// 跟桌面版 1.1.6 一样按内容校验（不看后缀）：改过名的合法种子能进，
+// 把文本改成 .torrent 的假种子会被拒。
+func Validate(path string) (string, error) {
+	st, err := os.Stat(path)
+	if err != nil {
+		return "", fmt.Errorf("读不到这个文件：%w", err)
+	}
+	if st.Size() > 32<<20 {
+		return "", fmt.Errorf("种子文件太大（%d MB），正常不会超过 32MB", st.Size()>>20)
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return "", fmt.Errorf("打不开文件：%w", err)
+	}
+	defer f.Close()
+	mi, err := metainfo.Load(io.LimitReader(f, 32<<20))
+	if err != nil {
+		return "", fmt.Errorf("这不是合法的种子文件（bencode 解析失败）")
+	}
+	info, err := mi.UnmarshalInfo()
+	if err != nil {
+		return "", fmt.Errorf("种子里没有可用的 info：%w", err)
+	}
+	name := info.Name
+	if name == "" {
+		name = "未命名种子"
+	}
+	return name, nil
 }
 
 func run(tk *task) {

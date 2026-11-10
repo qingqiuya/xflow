@@ -3,3 +3,8 @@ XFlow-Setup.exe
 *.exe
 ext-key.pem
 dist/
+*.apk
+*.apk.idsig
+*.jks
+*.aar
+android/build/
