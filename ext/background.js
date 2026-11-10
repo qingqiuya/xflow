@@ -14,6 +14,7 @@ const DEFAULTS = {
   notify: true,
   segs: 16,
   minMB: 1, // 小于这个尺寸不接管，交回浏览器（小文件走下载器反而慢）
+  pauseUntil: 0, // 临时暂停接管的截止时间戳；0 = 没暂停
 };
 const MENU_ID = "xflow-download-link";
 const DUP_WINDOW_MS = 5000; // 同一 URL 这么短时间内重复出现，当成连点
@@ -99,6 +100,7 @@ async function push(url, name, referer, cookie, dir) {
 // 同步判定：只看这条下载本身，不碰网络
 function shouldTake(item) {
   if (!C.enabled) return false;
+  if (C.pauseUntil && Date.now() < C.pauseUntil) return false; // 临时暂停中
   if (!item || item.state !== "in_progress" || item.error) return false;
   if (!/^https?:\/\//i.test(item.url || "")) return false; // blob: / data: / ftp:
   if (item.byExtensionId) return false; // 别的扩展（含自己）发起的，不抢
@@ -165,6 +167,11 @@ chrome.runtime.onInstalled.addListener(() => {
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId !== MENU_ID) return;
+  await reloadCfg();
+  if (C.pauseUntil && Date.now() < C.pauseUntil) {
+    await notify("接管已暂停", "先恢复接管再送任务（或者直接拖进汐流窗口）");
+    return;
+  }
   const url = info.linkUrl || info.srcUrl;
   // 磁力链接浏览器不会当"下载"，只能靠右键菜单送过去
   if (!/^(https?:\/\/|magnet:\?)/i.test(url || "")) {
