@@ -17,7 +17,22 @@ Windows 桌面下载器：HTTP 多线程分块 + BT/磁力，外加一个接管�
 
 ## 安装
 
-从 [Releases](https://github.com/qingqiuya/xflow/releases) 下 `XFlow-Setup.exe`，装到 `%LOCALAPPDATA%\XFlow`，不需要管理员权限。
+Release 里有两个 Windows 包，**程序本体是同一个**，区别只在交付方式：
+
+| | `XFlow-Setup.exe`（安装版） | `XFlow.exe`（绿色版） |
+|---|---|---|
+| 体积 | 6 MB（里面是 LZMA 压过的同一个 exe） | 21 MB，单文件 |
+| 怎么用 | 双击安装，建桌面 + 开始菜单快捷方式 | 双击直接跑 |
+| 装到哪 | `%LOCALAPPDATA%\XFlow` | 你放哪就在哪 |
+| 卸载 | 设置 → 应用，或目录里的 `Uninstall.exe` | 直接删掉 |
+| 浏览器插件 | 自带 `ext/` 目录，加载已解压直接选它 | exe 旁边没 `ext/`，接管功能要另外从仓库拿 |
+| 管理员权限 | 不需要 | 不需要 |
+
+配置和任务历史都在 `%USERPROFILE%\.localdl*`（端口、上次选的目录、任务记录、WebView 数据），跟 exe 放哪无关——两个版本可以随便切，历史不会丢。
+
+长期用推荐安装版（有快捷方式和卸载项，插件目录也现成）；绿色版适合放 U 盘、或者临时在别的机器上跑。
+
+从 [Releases](https://github.com/qingqiuya/xflow/releases) 下。
 
 ### Linux / Debian
 
