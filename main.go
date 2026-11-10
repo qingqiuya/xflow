@@ -356,6 +356,13 @@ func main() {
 			startHidden = true
 		}
 	}
+	// 也认一个标记文件：计划任务的启动参数容易丢（schtasks /change /tr 加不了参数），
+	// 有这个文件就静默启动到托盘，不再依赖命令行开关。
+	if !startHidden {
+		if _, err := os.Stat(filepath.Join(home, ".localdl-tray")); err == nil {
+			startHidden = true
+		}
+	}
 
 	w := webview2.NewWithOptions(webview2.WebViewOptions{
 		Debug:     false,

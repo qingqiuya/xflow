@@ -146,6 +146,31 @@ func hideWin() {
 	})
 	procEnumWindows.Call(enumCallbackPtr, 0)
 	logTray(fmt.Sprintf("hideWin: 藏了 %d 个可见窗口", n))
+
+	// WebView2 在首帧渲染 / Navigate 完成时会把父窗口 ShowWindow 回来，
+	// 所以藏一次不够——紧接着蹲 3 秒，谁变可见就再藏谁。
+	go func() {
+		for i := 0; i < 15; i++ {
+			time.Sleep(200 * time.Millisecond)
+			rehideVisible()
+		}
+	}()
+}
+
+// rehideVisible 把又冒出来的可见窗口再藏一遍（不打日志，避免刷屏）
+func rehideVisible() {
+	pid := uint32(os.Getpid())
+	cb := syscall.NewCallback(func(h, l uintptr) uintptr {
+		var wpid uint32
+		procGetWindowPid2.Call(h, uintptr(unsafe.Pointer(&wpid)))
+		if wpid == pid {
+			if v, _, _ := procIsWindowVis.Call(h); v != 0 {
+				procShowWindow2.Call(h, 6)
+			}
+		}
+		return 1
+	})
+	procEnumWindows.Call(cb, 0)
 }
 
 // startTray 用独立的消息循环做托盘，不碰 WebView2 的窗口过程
