@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/anacrolix/torrent/metainfo"
 	webview2 "github.com/pgmsoul/go-webview2"
@@ -341,6 +342,13 @@ func main() {
 	darkenWindowTitle("XFlow")
 	startTray()
 
+	startHidden := false
+	for _, a := range os.Args[1:] {
+		if a == "--tray" || a == "-tray" || a == "--hidden" {
+			startHidden = true
+		}
+	}
+
 	w := webview2.NewWithOptions(webview2.WebViewOptions{
 		Debug:     false,
 		AutoFocus: true,
@@ -363,6 +371,19 @@ func main() {
 	}
 	defer w.Destroy()
 	w.Navigate("http://127.0.0.1:" + strconv.Itoa(port))
+	if startHidden {
+		// 自启模式：等窗口建好就藏到托盘，任务栏不留图标
+		go func() {
+			for i := 0; i < 40; i++ {
+				time.Sleep(100 * time.Millisecond)
+				if findWin() != 0 {
+					time.Sleep(400 * time.Millisecond)
+					hideWin()
+					return
+				}
+			}
+		}()
+	}
 	w.Run()
 }
 
