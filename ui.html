@@ -73,13 +73,6 @@ button:active{transform:scale(.97)}
   <div class="addrow">
     <input id="url" placeholder="粘贴下载链接：http/https 直链 或 magnet:?xt=...">
     <input id="name" placeholder="文件名（可留空）" style="flex:0 0 150px">
-    <select id="segs" title="并发连接数">
-      <option value="4">4 连接</option>
-      <option value="8">8 连接</option>
-      <option value="16" selected>16 连接</option>
-      <option value="32">32 连接</option>
-      <option value="48">48 连接</option>
-    </select>
     <button class="primary" id="add">开始下载</button>
   </div>
   <div class="bar-top">
@@ -145,7 +138,7 @@ $('#add').onclick=async()=>{
   if(!src){$('#url').focus();return}
   $('#add').disabled=true;
   await fetch('/api/jobs',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({source:src,name:$('#name').value.trim(),segs:parseInt($('#segs').value)||16})});
+    body:JSON.stringify({source:src,name:$('#name').value.trim(),segs:8})});
   $('#url').value='';$('#name').value='';$('#add').disabled=false;load();
 };
 $('#url').addEventListener('keydown',e=>{if(e.key==='Enter')$('#add').click()});
@@ -202,8 +195,5 @@ $('#dlgOk').onclick=async()=>{
 };
 $('#clear').onclick=async()=>{await fetch('/api/clear');load()};
 $('#hide').onclick=async()=>{await fetch('/api/hide');};
-const savedSegs=localStorage.getItem('xflow_segs');
-if(savedSegs){const o=document.querySelector(`#segs option[value="${savedSegs}"]`); if(o)o.selected=true;}
-$('#segs').onchange=()=>localStorage.setItem('xflow_segs',$('#segs').value);
 load();setInterval(load,1000);
 </script></body></html>

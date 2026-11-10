@@ -249,13 +249,16 @@ func startHTTP(j *Job) {
 		spawn()
 	}
 
-	// 自适应：每 3 秒看一次总速度，还在涨就加 worker
-	adaptDone := make(chan struct{})
+	// 自适应（类似 TCP 慢启动）：每 3 秒**主动**加一批 worker 试水，
+	// 下一轮看总速度涨没涨：涨了就继续加，连着两轮没涨就认定吃满了、停手。
+	//
+	// 之前写的是「等速度自己涨了才加」，但速度只有加了线程才会涨——
+	// 判断方向反了，实测 workers 恒等于起始值，等于没自适应（2026-11-10 修）。
 	go func() {
-		defer close(adaptDone)
 		t := time.NewTicker(3 * time.Second)
 		defer t.Stop()
 		var prev, prevDelta int64
+		var probing int32 // 上一轮加了多少个
 		stall := 0
 		for {
 			select {
@@ -269,29 +272,37 @@ func startHTTP(j *Job) {
 					return
 				}
 				a := atomic.LoadInt32(&active)
-				// 比"每轮实际下载量"（等价速度），不是累计量的比例
-				growing := prevDelta > 0 && float64(delta) > float64(prevDelta)*1.10
-				// ★ 这里原来写的是 defer func(){ prevDelta = delta }()，
-				// 在循环里 defer 要等函数返回才执行 ⇒ prevDelta 永远 0，
-				// growing 永远 false，自适应等于没写。改成普通赋值。
-				prevDelta = delta
-				if growing && int(a) < maxWorkers {
-					add := int32(a)
-					if add < 2 {
-						add = 2
-					}
-					for i := int32(0); i < add && atomic.LoadInt32(&active) < maxWorkers; i++ {
-						spawn()
+				if a >= maxWorkers {
+					return
+				}
+
+				if probing > 0 {
+					// 上一轮加过线程：看效果
+					grown := prevDelta > 0 && float64(delta) > float64(prevDelta)*1.05
+					if !grown {
+						stall++
+						if stall >= 2 {
+							return // 连着两轮加了没效果，停下
+						}
+						prevDelta = delta
+						probing = 0
+						continue
 					}
 					stall = 0
-				} else {
-					if prevDelta > 0 {
-						stall++
-					}
-					if stall >= 2 && a >= int32(startWorkers) {
-						return // 连续两轮速度没长进，认定链路吃满了
-					}
 				}
+
+				// 试探性加一批：不低于 2 个，最多加到上限
+				add := probing
+				if add < 2 {
+					add = 2
+				}
+				var spawned int32
+				for i := int32(0); i < add && atomic.LoadInt32(&active) < maxWorkers; i++ {
+					spawn()
+					spawned++
+				}
+				probing = spawned
+				prevDelta = delta
 			}
 		}
 	}()
@@ -303,7 +314,6 @@ func startHTTP(j *Job) {
 		return
 	}
 	select {
-	case <-adaptDone:
 	default:
 	}
 	if atomic.LoadInt64(&total) < size {
