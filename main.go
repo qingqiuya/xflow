@@ -385,10 +385,8 @@ func main() {
 			for i := 0; i < 60; i++ {
 				time.Sleep(50 * time.Millisecond)
 				if findWin() != 0 {
-					// 立刻标成工具窗口：那一刻任务栏图标就没了，
-					// 再稍等让 WebView2 把首帧画完，然后彻底藏起来
-					markToolWindow()
-					time.Sleep(150 * time.Millisecond)
+					// 等首帧画完再藏（不再设 TOOLWINDOW，那会把标题栏的最小化/最大化干掉）
+					time.Sleep(200 * time.Millisecond)
 					hideWin()
 					return
 				}

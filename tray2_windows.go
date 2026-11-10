@@ -23,6 +23,8 @@ var (
 	procSetForeground2 = modUser32.NewProc("SetForegroundWindow")
 	procGetWindowLong2 = modUser32.NewProc("GetWindowLongPtrW")
 	procSetWindowLong2 = modUser32.NewProc("SetWindowLongPtrW")
+	procInvalidateRect = modUser32.NewProc("InvalidateRect")
+	procUpdateWindow   = modUser32.NewProc("UpdateWindow")
 )
 
 const wsExToolwindow = 0x00000080 // 工具窗口：不进任务栏、不进 Alt+Tab
@@ -40,12 +42,16 @@ func showWin() {
 	h := findWin()
 	logTray(fmt.Sprintf("showWin: hwnd=%#x", h))
 	if h != 0 {
-		// 先摘掉 TOOLWINDOW 再显示：工具窗口的标题栏只有 ×，
-		// 没有最小化/最大化按钮（清秋报的第二个 bug 就是这个）
+		// 不再碰 TOOLWINDOW：设了之后标题栏只剩 ×（没有最小化/最大化），
+		// 摘掉又得靠「隐藏再显示」才刷新，来回折腾还容易把 WebView2 弄成白屏。
+		// 隐藏时只 SW_HIDE 就够了——隐藏的窗口本来就不在任务栏。
 		clearToolWindow()
 		procShowWindow2.Call(h, 5) // SW_SHOW
 		procShowWindow2.Call(h, 9) // SW_RESTORE
 		procSetForeground2.Call(h)
+		// 隐藏期间 WebView2 会停渲染，回来时强制重画一遍，否则一片空白
+		procInvalidateRect.Call(h, 0, 1)
+		procUpdateWindow.Call(h)
 	}
 }
 
@@ -80,10 +86,6 @@ func hideWin() {
 	h := findWin()
 	logTray(fmt.Sprintf("hideWin: hwnd=%#x", h))
 	if h != 0 {
-		// 先标成工具窗口再藏：光 SW_HIDE 时任务栏偶尔会留个残影/闪一下，
-		// 加了 WS_EX_TOOLWINDOW 就从系统层面保证它不属于任务栏。
-		ex, _, _ := procGetWindowLong2.Call(h, gwlExStyle)
-		procSetWindowLong2.Call(h, gwlExStyle, ex|wsExToolwindow)
 		procShowWindow2.Call(h, 6) // SW_HIDE
 	}
 }
