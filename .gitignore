@@ -8,3 +8,4 @@ dist/
 *.jks
 *.aar
 android/build/
+android/app/src/main/assets/

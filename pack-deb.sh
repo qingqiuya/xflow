@@ -79,6 +79,25 @@ EOF
 cp README.md "$PKG/usr/share/doc/xflow/README.md"
 gzip -9n "$PKG/usr/share/doc/xflow/README.md"
 
+# 许可：MIT 正文 + 第三方组件全量原文（MPL/Apache/BSD 的分发义务）
+DOC="$PKG/usr/share/doc/xflow"
+cp LICENSE THIRD_PARTY_LICENSES.md "$DOC/"
+cp -r licenses "$DOC/licenses"
+{
+  echo "Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/"
+  echo "Upstream-Name: xflow"
+  echo "Source: https://github.com/qingqiuya/xflow"
+  echo
+  echo "Files: *"
+  echo "Copyright: 2026 qingqiuya"
+  echo "License: MIT"
+  sed -e 's/^$/./' -e 's/^/ /' LICENSE
+  echo
+  echo "Files: licenses/*"
+  echo "Copyright: 各自模块作者"
+  echo "License: 原文见 licenses/ 各文件；汇总见 THIRD_PARTY_LICENSES.md"
+} > "$DOC/copyright"
+
 cat > "$PKG/DEBIAN/control" <<EOF
 Package: xflow
 Version: $VER

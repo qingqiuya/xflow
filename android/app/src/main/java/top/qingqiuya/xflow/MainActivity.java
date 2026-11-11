@@ -1,6 +1,7 @@
 package top.qingqiuya.xflow;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
@@ -16,9 +17,11 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -51,6 +54,8 @@ public class MainActivity extends Activity {
                 sub.setText("汐流 · 把文件带下来 · v" + v);
             } catch (Exception ignored) {
             }
+            // 点副标题看开源许可（APK 里没有 ActionBar，不另开菜单）
+            sub.setOnClickListener(v -> showLicenses());
         }
 
         Button add = findViewById(R.id.addBtn);
@@ -73,6 +78,42 @@ public class MainActivity extends Activity {
         });
 
         ui.post(render);
+    }
+
+    // ---------------------------------------------------------------- 开源许可
+    //
+    // 分发 APK 时要把 MIT 正文和第三方组件（MPL-2.0 / Apache-2.0 / BSD）的许可
+    // 原文一起带上。文本来自仓库根目录，build.sh 会拷进 assets/。
+
+    private void showLicenses() {
+        String text;
+        try (InputStream in = getAssets().open("THIRD_PARTY_LICENSES.md")) {
+            StringBuilder sb = new StringBuilder();
+            BufferedReader br = new BufferedReader(new InputStreamReader(in, "UTF-8"));
+            String line;
+            while ((line = br.readLine()) != null) {
+                sb.append(line).append('\n');
+            }
+            text = sb.toString();
+        } catch (Exception e) {
+            text = "许可文件没打进 APK：" + e.getMessage();
+        }
+        TextView tv = new TextView(this);
+        int pad = (int) (16 * getResources().getDisplayMetrics().density);
+        tv.setPadding(pad, pad, pad, pad);
+        tv.setTextSize(11);
+        tv.setTextIsSelectable(true);
+        tv.setTypeface(android.graphics.Typeface.MONOSPACE);
+        tv.setText(text);
+
+        android.widget.ScrollView sv = new android.widget.ScrollView(this);
+        sv.addView(tv);
+
+        new AlertDialog.Builder(this)
+                .setTitle("开源许可")
+                .setView(sv)
+                .setPositiveButton("好", null)
+                .show();
     }
 
     // ---------------------------------------------------------------- 种子文件

@@ -1,0 +1,5 @@
+github.com/go-llsqlite/adapter v0.0.0-20230927005056-7f5ce7f0c916
+许可：见备注
+https://github.com/go-llsqlite/adapter
+
+上游仓库未附 LICENSE 文件；本项目未修改该模块，仅随 go-llsqlite/crawshaw 间接引入，重分发时以其仓库声明为准。

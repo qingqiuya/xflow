@@ -16,6 +16,9 @@ HOST="${XFLOW_RELEASE_HOST:-}"
 BASE="${XFLOW_RELEASE_DIR:-/srv/releases/xflow}"
 DIR="$BASE/$VER"
 
+echo "生成第三方许可清单 ..."
+python3 tools/gen-licenses.py
+
 echo "构建 XFlow $VER ..."
 CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "-H windowsgui -s -w -X main.Version=$VER" -o XFlow.exe .
 rsrc -ico app.ico -manifest app.manifest -o rsrc.syso -arch amd64 2>/dev/null || true
@@ -23,13 +26,14 @@ makensis setup.nsi >/dev/null
 
 if [ -z "$HOST" ]; then
   echo "构建完成（没设 XFLOW_RELEASE_HOST，跳过上传）"
-  echo "  XFlow.exe         $(du -h XFlow.exe | cut -f1)"
-  echo "  XFlow-Setup.exe   $(du -h XFlow-Setup.exe | cut -f1)"
+  echo "  XFlow.exe               $(du -h XFlow.exe | cut -f1)"
+  echo "  XFlow-Setup.exe         $(du -h XFlow-Setup.exe | cut -f1)"
+  echo "  LICENSE / THIRD_PARTY_LICENSES.md（单文件下载的人也要拿到许可）"
   exit 0
 fi
 
 echo "上传到 $HOST:$DIR ..."
 ssh "$HOST" "mkdir -p $DIR"
-scp -q XFlow.exe XFlow-Setup.exe "$HOST:$DIR/"
-ssh "$HOST" "cd $DIR && sha256sum XFlow.exe XFlow-Setup.exe > SHA256SUMS && ls -lh"
+scp -q XFlow.exe XFlow-Setup.exe LICENSE THIRD_PARTY_LICENSES.md "$HOST:$DIR/"
+ssh "$HOST" "cd $DIR && sha256sum XFlow.exe XFlow-Setup.exe LICENSE THIRD_PARTY_LICENSES.md > SHA256SUMS && ls -lh"
 echo "发布完成：$HOST:$DIR"

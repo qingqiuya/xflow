@@ -41,12 +41,27 @@ fi
 
 rm -rf "$OUT" && mkdir -p "$OUT/gen" "$OUT/classes" "$OUT/dex"
 
+# 许可：MIT 正文 + 第三方组件原文进 assets（界面点副标题可看）。
+# 原文由仓库根的 tools/gen-licenses.py 生成，不在这里手工维护。
+# 许可原文在仓库根（android/ 的上一层）；如果这是从仓库里单独拷出来的构建目录，
+# 上一层没有 LICENSE，就退回到脚本同目录找（许可三件跟 build.sh 放一起）。
+LICROOT=$(cd "$HERE/.." && pwd)
+[ -f "$LICROOT/LICENSE" ] || LICROOT=$HERE
+if [ ! -f "$LICROOT/THIRD_PARTY_LICENSES.md" ]; then
+  echo "找不到第三方许可清单（$LICROOT/THIRD_PARTY_LICENSES.md）—— 先在仓库根跑 python3 tools/gen-licenses.py" >&2
+  exit 1
+fi
+ASSETS=$APP/assets
+rm -rf "$ASSETS" && mkdir -p "$ASSETS"
+cp "$LICROOT/LICENSE" "$LICROOT/THIRD_PARTY_LICENSES.md" "$ASSETS/"
+cp -r "$LICROOT/licenses" "$ASSETS/licenses"
+
 echo "[1/6] 编译资源"
 $BT/aapt2 compile --dir $APP/res -o $OUT/res.zip
 
 echo "[2/6] 链接资源 + 生成 R.java"
 $BT/aapt2 link -o $OUT/base.apk -I "$PLATFORM" \
-  --manifest $APP/AndroidManifest.xml -R $OUT/res.zip \
+  --manifest $APP/AndroidManifest.xml -R $OUT/res.zip -A "$ASSETS" \
   --java $OUT/gen --auto-add-overlay
 
 echo "[2.5/6] 解 AAR（BT 引擎）"

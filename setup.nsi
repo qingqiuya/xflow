@@ -26,6 +26,8 @@ VIAddVersionKey "LegalCopyright" "© ${PUBLISHER}"
 !define MUI_ABORTWARNING
 
 !insertmacro MUI_PAGE_WELCOME
+; 许可页：MIT 正文 + 第三方组件声明（installer-license.txt 由 tools/gen-licenses.py 生成，UTF-8 带 BOM）
+!insertmacro MUI_PAGE_LICENSE "installer-license.txt"
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
 !define MUI_FINISHPAGE_RUN "$INSTDIR\${APPEXE}"
@@ -50,6 +52,10 @@ Section "Install"
   ; 浏览器接管插件（不预装，用户到 chrome://extensions 手动加载 unpacked）
   File /r "ext"
   File "浏览器插件-安装说明.txt"
+  ; 许可：MIT + 第三方组件全量原文（MPL/Apache/BSD 的分发义务）
+  File "LICENSE"
+  File "THIRD_PARTY_LICENSES.md"
+  File /r "licenses"
 
   CreateDirectory "$SMPROGRAMS\${APPNAME}"
   CreateShortCut "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk" "$INSTDIR\${APPEXE}" "" "$INSTDIR\app.ico" 0
@@ -78,6 +84,9 @@ Section "Uninstall"
   Delete "$INSTDIR\XFlow.exe"
   Delete "$INSTDIR\app.ico"
   Delete "$INSTDIR\浏览器插件-安装说明.txt"
+  Delete "$INSTDIR\LICENSE"
+  Delete "$INSTDIR\THIRD_PARTY_LICENSES.md"
+  RMDir /r "$INSTDIR\licenses"
   RMDir /r "$INSTDIR\ext"
   Delete "$INSTDIR\Uninstall.exe"
   RMDir "$INSTDIR"

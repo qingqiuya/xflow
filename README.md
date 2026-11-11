@@ -133,4 +133,10 @@ wv2/             WebView2 绑定的本地副本（含一处窗口关闭的改动
 
 ## 许可
 
-MIT。`wv2/` 是 [jchv/go-webview2](https://github.com/jchv/go-webview2) 的副本，同样是 MIT，版权归原作者。
+MIT，见 [`LICENSE`](LICENSE)。`wv2/` 是 [jchv/go-webview2](https://github.com/jchv/go-webview2) 的副本，同样是 MIT，版权归原作者。
+
+第三方组件（BT 引擎是 MPL-2.0，另有 Apache-2.0 / BSD / ISC）的完整清单和许可原文在
+[`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md) 与 `licenses/`，由 `tools/gen-licenses.py`
+按 `go list -deps` 自动生成——只收录真正编进二进制的模块。发版时这几个文件跟着产物一起走：
+NSIS 安装包里有一页许可 + 安装目录下的 `LICENSE` / `THIRD_PARTY_LICENSES.md` / `licenses/`，
+deb 装到 `/usr/share/doc/xflow/`，APK 打在 `assets/`（界面点副标题可看）。
