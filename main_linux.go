@@ -117,6 +117,58 @@ func main() {
 		json.NewEncoder(w).Encode(map[string]any{"jobs": mgr.List()})
 	})
 
+	// 浏览器插件走这个（与 Windows 版同名同参）：插件只认 /api/add + url/name/referer/cookie
+	// ★ 2026-11-11：Linux 版原来只有 /api/jobs，插件一调就 404「汐流没接住」
+	mux.HandleFunc("/api/add", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			http.Error(w, "只收 POST", 405)
+			return
+		}
+		var d struct {
+			URL     string `json:"url"`
+			Name    string `json:"name"`
+			Dir     string `json:"dir"`
+			Referer string `json:"referer"`
+			Cookie  string `json:"cookie"`
+			Segs    int    `json:"segs"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&d); err != nil {
+			json.NewEncoder(w).Encode(map[string]any{"ok": false, "err": "请求体不是合法 JSON"})
+			return
+		}
+		src := strings.TrimSpace(d.URL)
+		if src == "" {
+			json.NewEncoder(w).Encode(map[string]any{"ok": false, "err": "url 为空"})
+			return
+		}
+		dir := d.Dir
+		if dir == "" {
+			dir = currentDir()
+		}
+		name := d.Name
+		if name == "" {
+			name = fileNameFromURL(src)
+		}
+		if isBTSource(src) {
+			j := mgr.AddBT(src, orDefault(name, "BT 任务"), dir)
+			json.NewEncoder(w).Encode(map[string]any{"ok": true, "id": j.ID})
+			return
+		}
+		h := map[string]string{}
+		if d.Referer != "" {
+			h["Referer"] = d.Referer
+		}
+		if d.Cookie != "" {
+			h["Cookie"] = d.Cookie
+		}
+		j, err := mgr.AddHTTPWithHeaders(src, name, dir, d.Segs, h)
+		if err != nil {
+			json.NewEncoder(w).Encode(map[string]any{"ok": false, "err": err.Error()})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{"ok": true, "id": j.ID, "name": name})
+	})
+
 	mux.HandleFunc("/api/job/", func(w http.ResponseWriter, r *http.Request) {
 		parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/job/"), "/")
 		id := parts[0]
@@ -166,7 +218,9 @@ func main() {
 
 	mux.HandleFunc("/api/dir", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "POST" {
-			var d struct{ Dir string `json:"dir"` }
+			var d struct {
+				Dir string `json:"dir"`
+			}
 			json.NewDecoder(r.Body).Decode(&d)
 			if d.Dir != "" {
 				os.MkdirAll(d.Dir, 0755)
