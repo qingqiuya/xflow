@@ -1,5 +1,5 @@
 github.com/alecthomas/atomic v0.1.0-alpha2
-许可：MIT
+许可：MIT（来源：模块缓存）
 https://github.com/alecthomas/atomic
 
 ----- COPYING -----

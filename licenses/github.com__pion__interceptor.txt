@@ -1,5 +1,5 @@
 github.com/pion/interceptor v0.1.40
-许可：MIT
+许可：MIT（来源：模块缓存）
 https://github.com/pion/interceptor
 
 ----- LICENSE -----

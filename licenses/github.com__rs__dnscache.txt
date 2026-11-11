@@ -1,5 +1,5 @@
 github.com/rs/dnscache v0.0.0-20211102005908-e0241e321417
-许可：MIT
+许可：MIT（来源：模块缓存）
 https://github.com/rs/dnscache
 
 ----- LICENSE -----

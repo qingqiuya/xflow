@@ -1,5 +1,5 @@
 github.com/multiformats/go-varint v0.0.6
-许可：MIT
+许可：MIT（来源：模块缓存）
 https://github.com/multiformats/go-varint
 
 ----- LICENSE -----

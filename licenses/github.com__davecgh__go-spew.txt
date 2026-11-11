@@ -1,5 +1,5 @@
 github.com/davecgh/go-spew v1.1.1
-许可：ISC
+许可：ISC（来源：模块缓存）
 https://github.com/davecgh/go-spew
 
 ----- LICENSE -----

@@ -1,5 +1,5 @@
 github.com/anacrolix/envpprof v1.4.0
-许可：MIT
+许可：MIT（来源：模块缓存）
 https://github.com/anacrolix/envpprof
 
 ----- LICENSE -----

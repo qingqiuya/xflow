@@ -1,5 +1,5 @@
 github.com/tidwall/btree v1.8.1
-许可：MIT
+许可：MIT（来源：模块缓存）
 https://github.com/tidwall/btree
 
 ----- LICENSE -----

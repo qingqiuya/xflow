@@ -1,5 +1,5 @@
 github.com/google/btree v1.1.2
-许可：Apache-2.0
+许可：Apache-2.0（来源：模块缓存）
 https://github.com/google/btree
 
 ----- LICENSE -----

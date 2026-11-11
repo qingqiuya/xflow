@@ -1,5 +1,5 @@
 golang.org/x/sync v0.18.0
-许可：BSD-3-Clause
+许可：BSD-3-Clause（来源：模块缓存）
 https://golang.org/x/sync
 
 ----- LICENSE -----

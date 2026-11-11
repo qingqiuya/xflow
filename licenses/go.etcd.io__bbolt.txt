@@ -1,5 +1,5 @@
 go.etcd.io/bbolt v1.3.6
-许可：MIT
+许可：MIT（来源：模块缓存）
 https://go.etcd.io/bbolt
 
 ----- LICENSE -----

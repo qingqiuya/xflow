@@ -1,5 +1,5 @@
 github.com/pkg/errors v0.9.1
-许可：BSD-2-Clause
+许可：BSD-2-Clause（来源：模块缓存）
 https://github.com/pkg/errors
 
 ----- LICENSE -----

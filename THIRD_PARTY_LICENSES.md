@@ -10,10 +10,9 @@ XFlow 本体以 MIT 许可发布（见 `LICENSE`）。它静态链接了下列�
 - MIT：38 个
 - BSD-3-Clause：14 个
 - Apache-2.0：9 个
-- MPL-2.0：8 个
+- MPL-2.0：9 个
 - BSD-2-Clause：2 个
 - ISC：2 个
-- 见备注：1 个
 
 ## 清单
 
@@ -43,7 +42,7 @@ XFlow 本体以 MIT 许可发布（见 `LICENSE`）。它静态链接了下列�
 | `github.com/davecgh/go-spew` | v1.1.1 | ISC | https://github.com/davecgh/go-spew |
 | `github.com/dustin/go-humanize` | v1.0.0 | MIT | https://github.com/dustin/go-humanize |
 | `github.com/edsrzf/mmap-go` | v1.1.0 | BSD-3-Clause | https://github.com/edsrzf/mmap-go |
-| `github.com/go-llsqlite/adapter` | v0.0.0-20230927005056-7f5ce7f0c916 | 见备注 | https://github.com/go-llsqlite/adapter |
+| `github.com/go-llsqlite/adapter` | v0.0.0-20230927005056-7f5ce7f0c916 | MPL-2.0 | https://github.com/go-llsqlite/adapter |
 | `github.com/go-llsqlite/crawshaw` | v0.5.6-0.20250312230104-194977a03421 | ISC | https://github.com/go-llsqlite/crawshaw |
 | `github.com/go-logr/logr` | v1.4.3 | Apache-2.0 | https://github.com/go-logr/logr |
 | `github.com/go-logr/stdr` | v1.2.2 | Apache-2.0 | https://github.com/go-logr/stdr |
@@ -110,6 +109,7 @@ XFlow 本体以 MIT 许可发布（见 `LICENSE`）。它静态链接了下列�
 - `github.com/anacrolix/sync` —— https://github.com/anacrolix/sync
 - `github.com/anacrolix/torrent` —— https://github.com/anacrolix/torrent
 - `github.com/anacrolix/upnp` —— https://github.com/anacrolix/upnp
+- `github.com/go-llsqlite/adapter` —— https://github.com/go-llsqlite/adapter（许可原文取自上游仓库：该版本模块包内没带 LICENSE）
 
 ### Apache-2.0
 
@@ -127,4 +127,4 @@ XFlow 本体以 MIT 许可发布（见 `LICENSE`）。它静态链接了下列�
 
 ### 许可缺失
 
-- `github.com/go-llsqlite/adapter`：上游仓库未附 LICENSE 文件；本项目未修改该模块，仅随 go-llsqlite/crawshaw 间接引入，重分发时以其仓库声明为准。
+无。

@@ -1,5 +1,5 @@
 github.com/wlynxg/anet v0.0.3
-许可：BSD-3-Clause
+许可：BSD-3-Clause（来源：模块缓存）
 https://github.com/wlynxg/anet
 
 ----- LICENSE -----

@@ -1,5 +1,5 @@
 github.com/anacrolix/upnp v0.1.4
-许可：MPL-2.0
+许可：MPL-2.0（来源：模块缓存）
 https://github.com/anacrolix/upnp
 
 ----- LICENCE -----

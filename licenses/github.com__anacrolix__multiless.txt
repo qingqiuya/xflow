@@ -1,5 +1,5 @@
 github.com/anacrolix/multiless v0.4.0
-许可：MPL-2.0
+许可：MPL-2.0（来源：模块缓存）
 https://github.com/anacrolix/multiless
 
 ----- LICENCE -----

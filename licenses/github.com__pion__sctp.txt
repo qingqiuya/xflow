@@ -1,5 +1,5 @@
 github.com/pion/sctp v1.8.33
-许可：MIT
+许可：MIT（来源：模块缓存）
 https://github.com/pion/sctp
 
 ----- LICENSE -----

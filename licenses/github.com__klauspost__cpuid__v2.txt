@@ -1,5 +1,5 @@
 github.com/klauspost/cpuid/v2 v2.2.3
-许可：MIT
+许可：MIT（来源：模块缓存）
 https://github.com/klauspost/cpuid/v2
 
 ----- LICENSE -----

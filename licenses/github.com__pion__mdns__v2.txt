@@ -1,5 +1,5 @@
 github.com/pion/mdns/v2 v2.0.7
-许可：MIT
+许可：MIT（来源：模块缓存）
 https://github.com/pion/mdns/v2
 
 ----- LICENSE -----

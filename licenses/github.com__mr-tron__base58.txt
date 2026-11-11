@@ -1,5 +1,5 @@
 github.com/mr-tron/base58 v1.2.0
-许可：MIT
+许可：MIT（来源：模块缓存）
 https://github.com/mr-tron/base58
 
 ----- LICENSE -----

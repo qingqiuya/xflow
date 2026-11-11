@@ -1,5 +1,5 @@
 github.com/anacrolix/log v0.17.1-0.20251118025802-918f1157b7bb
-许可：MPL-2.0
+许可：MPL-2.0（来源：模块缓存）
 https://github.com/anacrolix/log
 
 ----- LICENSE -----

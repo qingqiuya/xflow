@@ -1,5 +1,5 @@
 github.com/anacrolix/mmsg v1.0.1
-许可：MPL-2.0
+许可：MPL-2.0（来源：模块缓存）
 https://github.com/anacrolix/mmsg
 
 ----- LICENSE -----

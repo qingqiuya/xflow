@@ -1,5 +1,5 @@
 lukechampine.com/blake3 v1.1.6
-许可：MIT
+许可：MIT（来源：模块缓存）
 https://lukechampine.com/blake3
 
 ----- LICENSE -----

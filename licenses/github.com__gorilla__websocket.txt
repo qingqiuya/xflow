@@ -1,5 +1,5 @@
 github.com/gorilla/websocket v1.5.0
-许可：BSD-2-Clause
+许可：BSD-2-Clause（来源：模块缓存）
 https://github.com/gorilla/websocket
 
 ----- LICENSE -----

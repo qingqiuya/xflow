@@ -1,5 +1,5 @@
 github.com/pion/rtp v1.8.18
-许可：MIT
+许可：MIT（来源：模块缓存）
 https://github.com/pion/rtp
 
 ----- LICENSE -----

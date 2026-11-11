@@ -1,5 +1,5 @@
 github.com/google/uuid v1.6.0
-许可：BSD-3-Clause
+许可：BSD-3-Clause（来源：模块缓存）
 https://github.com/google/uuid
 
 ----- LICENSE -----

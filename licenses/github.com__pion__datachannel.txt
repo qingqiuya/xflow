@@ -1,5 +1,5 @@
 github.com/pion/datachannel v1.5.9
-许可：MIT
+许可：MIT（来源：模块缓存）
 https://github.com/pion/datachannel
 
 ----- LICENSE -----

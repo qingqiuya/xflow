@@ -1,5 +1,5 @@
 github.com/pion/sdp/v3 v3.0.9
-许可：MIT
+许可：MIT（来源：模块缓存）
 https://github.com/pion/sdp/v3
 
 ----- LICENSE -----

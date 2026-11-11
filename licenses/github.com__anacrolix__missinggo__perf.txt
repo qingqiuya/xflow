@@ -1,5 +1,5 @@
 github.com/anacrolix/missinggo/perf v1.0.0
-许可：MIT
+许可：MIT（来源：模块缓存）
 https://github.com/anacrolix/missinggo/perf
 
 ----- LICENSE -----

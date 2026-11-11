@@ -1,5 +1,5 @@
 github.com/multiformats/go-multihash v0.2.3
-许可：MIT
+许可：MIT（来源：模块缓存）
 https://github.com/multiformats/go-multihash
 
 ----- LICENSE -----

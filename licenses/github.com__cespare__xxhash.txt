@@ -1,5 +1,5 @@
 github.com/cespare/xxhash v1.1.0
-许可：MIT
+许可：MIT（来源：模块缓存）
 https://github.com/cespare/xxhash
 
 ----- LICENSE.txt -----

@@ -1,5 +1,5 @@
 github.com/pion/turn/v4 v4.0.0
-许可：MIT
+许可：MIT（来源：模块缓存）
 https://github.com/pion/turn/v4
 
 ----- LICENSE -----

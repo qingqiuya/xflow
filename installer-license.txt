@@ -26,7 +26,7 @@ SOFTWARE.
 ---
 
 本程序还包含以下开源组件：
-MIT 38 个、BSD-3-Clause 14 个、Apache-2.0 9 个、MPL-2.0 8 个、BSD-2-Clause 2 个、ISC 2 个、见备注 1 个
+MIT 38 个、BSD-3-Clause 14 个、Apache-2.0 9 个、MPL-2.0 9 个、BSD-2-Clause 2 个、ISC 2 个
 
 完整许可原文见安装目录下的 licenses/ 目录，或 THIRD_PARTY_LICENSES.md，
 也可在 https://github.com/qingqiuya/xflow 查看。

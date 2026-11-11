@@ -23,10 +23,10 @@ LICENSE_NAMES = (
     "LICENCE", "LICENCE.txt", "COPYING", "COPYING.txt", "COPYING.md",
 )
 
-# 本机 go 模块缓存里没有许可文件的上游（人工确认过）——只在清单里注明，不伪造文本
-NO_FILE_HINT = {
-    "github.com/go-llsqlite/adapter": "上游仓库未附 LICENSE 文件；本项目未修改该模块，仅随 go-llsqlite/crawshaw 间接引入，重分发时以其仓库声明为准。",
-}
+# 有些模块的早期版本打包时没带 LICENSE（文件是后来才加进上游仓库的），
+# go 模块缓存里就没有。这种把上游当前 LICENSE 原文放这里，脚本会优先用它。
+# 文件名规则：模块路径里的非字母数字全换成 __ ，加 .txt
+UPSTREAM_LIC_DIR = os.path.join(ROOT, "upstream-licenses")
 
 
 def classify(text):
@@ -93,18 +93,25 @@ def main():
         for name, p in files:
             with open(p, encoding="utf-8", errors="replace") as f:
                 texts.append((name, f.read()))
+        source = "模块缓存"
+        if not texts:
+            fb = os.path.join(UPSTREAM_LIC_DIR, re.sub(r"[^A-Za-z0-9._-]+", "__", path) + ".txt")
+            if os.path.isfile(fb):
+                with open(fb, encoding="utf-8", errors="replace") as f:
+                    texts.append((os.path.basename(fb) + "（取自上游仓库，该版本模块包内没有）", f.read()))
+                source = "上游仓库"
         body = "\n\n".join(f"----- {name} -----\n{t}" for name, t in texts)
         kind = classify(body) if texts else "见备注"
         src = f"https://{path}" if "." in path.split("/")[0] else path
-        rows.append((path, ver, kind, src, body))
+        rows.append((path, ver, kind, src, body, source))
 
         fn = re.sub(r"[^A-Za-z0-9._-]+", "__", path) + ".txt"
         with open(os.path.join(LIC_DIR, fn), "w", encoding="utf-8") as f:
-            f.write(f"{path} {ver}\n许可：{kind}\n{src}\n")
+            f.write(f"{path} {ver}\n许可：{kind}（来源：{source}）\n{src}\n")
             if body.strip():
                 f.write("\n" + body.rstrip() + "\n")
             else:
-                f.write("\n" + NO_FILE_HINT.get(path, "上游未提供 LICENSE 文件，以源码仓库声明为准。") + "\n")
+                f.write("\n上游未提供 LICENSE 文件，以源码仓库声明为准。\n")
         kinds[kind] = kinds.get(kind, 0) + 1
 
     rows.sort(key=lambda r: r[0].lower())
@@ -118,7 +125,7 @@ def main():
             f.write(f"- {k}：{v} 个\n")
         f.write("\n## 清单\n\n")
         f.write("| 模块 | 版本 | 许可 | 源码 |\n|---|---|---|---|\n")
-        for path, ver, kind, src, _ in rows:
+        for path, ver, kind, src, _, _ in rows:
             f.write(f"| `{path}` | {ver} | {kind} | {src} |\n")
         f.write("\n## 特别说明\n\n")
         f.write("### MPL-2.0（Mozilla Public License 2.0）\n\n")
@@ -128,7 +135,9 @@ def main():
             f.write("按要求在此声明其源码可从以下地址获取；如日后本地修改了其中的文件，\n")
             f.write("被修改的文件将以 MPL-2.0 公开。\n\n")
             for p in mpl:
-                f.write(f"- `{p}` —— https://{p}\n")
+                r = next(x for x in rows if x[0] == p)
+                note = "" if r[5] == "模块缓存" else "（许可原文取自上游仓库：该版本模块包内没带 LICENSE）"
+                f.write(f"- `{p}` —— https://{p}{note}\n")
         else:
             f.write("无。\n")
         f.write("\n### Apache-2.0\n\n")
@@ -140,7 +149,7 @@ def main():
         missing = [r[0] for r in rows if not r[4].strip()]
         if missing:
             for p in missing:
-                f.write(f"- `{p}`：{NO_FILE_HINT.get(p, '上游未提供 LICENSE 文件，以源码仓库声明为准')}\n")
+                f.write(f"- `{p}`：上游未提供 LICENSE 文件，以源码仓库声明为准\n")
         else:
             f.write("无。\n")
 

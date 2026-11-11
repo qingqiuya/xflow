@@ -1,5 +1,5 @@
 github.com/anacrolix/btree v0.0.0-20251201064447-d86c3fa41bd8
-许可：Apache-2.0
+许可：Apache-2.0（来源：模块缓存）
 https://github.com/anacrolix/btree
 
 ----- LICENSE -----

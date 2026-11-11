@@ -1,5 +1,5 @@
 github.com/pion/rtcp v1.2.15
-许可：MIT
+许可：MIT（来源：模块缓存）
 https://github.com/pion/rtcp
 
 ----- LICENSE -----

@@ -1,5 +1,5 @@
 github.com/pion/randutil v0.1.0
-许可：MIT
+许可：MIT（来源：模块缓存）
 https://github.com/pion/randutil
 
 ----- LICENSE -----

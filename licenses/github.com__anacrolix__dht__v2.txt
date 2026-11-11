@@ -1,5 +1,5 @@
 github.com/anacrolix/dht/v2 v2.23.0
-许可：MPL-2.0
+许可：MPL-2.0（来源：模块缓存）
 https://github.com/anacrolix/dht/v2
 
 ----- LICENSE -----
