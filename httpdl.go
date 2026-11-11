@@ -43,6 +43,27 @@ func fileNameFromURL(u string) string {
 
 // applyHeaders 把插件转进来的头（Referer / Cookie 等）加到请求上。
 // Range 和 User-Agent 属于引擎自己管，不让外部覆盖。
+// 两套 UA：SourceForge 会拦以 Mozilla 开头的 UA（直接 403），
+// 而大部分正经站点又只认浏览器 UA。按域名分流，403 时再换另一套兜底。
+const browserUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+
+func clientUA() string {
+	v := Version
+	if v == "" {
+		v = "dev"
+	}
+	return "XFlow/" + v + " (+https://github.com/qingqiuya/xflow)"
+}
+
+// userAgentFor：SourceForge 的下载域名明确拦截 Mozilla 前缀的 UA（2026-11-11 实测：
+// 同一个链接 Mozilla/5.0 → 403，XFlow/1.6.2 或 curl → 301 → 200）。
+func userAgentFor(rawurl string) string {
+	if strings.Contains(strings.ToLower(rawurl), "sourceforge.net") {
+		return clientUA()
+	}
+	return browserUA
+}
+
 func applyHeaders(req *http.Request, j *Job) {
 	for k, v := range j.Headers {
 		if strings.EqualFold(k, "Range") || strings.EqualFold(k, "User-Agent") || strings.EqualFold(k, "Host") {
@@ -135,7 +156,7 @@ func startHTTP(j *Job) {
 		setState("error", err.Error())
 		return
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 LocalDL/1.0")
+	req.Header.Set("User-Agent", userAgentFor(j.Source))
 	applyHeaders(req, j)
 	resp, err := httpClient.Do(req)
 	if err != nil {
@@ -146,9 +167,24 @@ func startHTTP(j *Job) {
 		}
 		return
 	}
+	// 403 多数是防盗链 / UA 校验：换另一套 UA 重试一次再判死
+	if resp.StatusCode == 403 {
+		resp.Body.Close()
+		alt := browserUA
+		if req.Header.Get("User-Agent") == browserUA {
+			alt = clientUA()
+		}
+		if req2, err2 := http.NewRequestWithContext(ctx, "GET", j.Source, nil); err2 == nil {
+			req2.Header.Set("User-Agent", alt)
+			applyHeaders(req2, j)
+			if resp2, err3 := httpClient.Do(req2); err3 == nil {
+				resp = resp2
+			}
+		}
+	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 400 {
-		setState("error", fmt.Sprintf("HTTP %d", resp.StatusCode))
+		setState("error", fmt.Sprintf("HTTP %d（源站拒绝：防盗链或 UA 校验）", resp.StatusCode))
 		return
 	}
 
@@ -400,7 +436,7 @@ func downloadRange(ctx context.Context, j *Job, f *os.File, from, to int64, tota
 	if err != nil {
 		return from, err
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 LocalDL/1.0")
+	req.Header.Set("User-Agent", userAgentFor(j.Source))
 	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", from, to))
 	applyHeaders(req, j)
 	resp, err := httpClient.Do(req)

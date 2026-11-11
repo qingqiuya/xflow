@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -113,4 +114,15 @@ func TestRangeFailuresBecomeError(t *testing.T) {
 		t.Fatal("error 状态要带原因")
 	}
 	t.Logf("按预期停下：state=%s err=%s", state, msg)
+}
+
+// SourceForge 会拦 Mozilla 前缀的 UA（403），其余站点走浏览器 UA。
+func TestUserAgentForSourceForge(t *testing.T) {
+	sf := "https://downloads.sourceforge.net/project/xxx/a.zip"
+	if ua := userAgentFor(sf); strings.HasPrefix(ua, "Mozilla") {
+		t.Fatalf("SourceForge 不该用浏览器 UA: %s", ua)
+	}
+	if ua := userAgentFor("https://example.com/a.zip"); !strings.HasPrefix(ua, "Mozilla") {
+		t.Fatalf("普通站点该用浏览器 UA: %s", ua)
+	}
 }
