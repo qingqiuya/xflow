@@ -24,6 +24,14 @@ VIAddVersionKey "LegalCopyright" "© ${PUBLISHER}"
 !define MUI_ICON "app.ico"
 !define MUI_UNICON "app.ico"
 !define MUI_ABORTWARNING
+; 安装界面美化（2026-11-14）：欢迎页左图 + 每页顶部条，图都从 icon.jpg 生成
+!define MUI_HEADERIMAGE
+!define MUI_HEADERIMAGE_BITMAP "installer-header.bmp"
+!define MUI_HEADERIMAGE_RIGHT
+!define MUI_WELCOMEFINISHPAGE_BITMAP "installer-welcome.bmp"
+!define MUI_UNWELCOMEFINISHPAGE_BITMAP "installer-welcome.bmp"
+!define MUI_FINISHPAGE_SHOWREADME ""
+!define MUI_FINISHPAGE_SHOWREADME_NOTCHECKED
 
 !insertmacro MUI_PAGE_WELCOME
 ; 许可页：MIT 正文 + 第三方组件声明（installer-license.txt 由 tools/gen-licenses.py 生成，UTF-8 带 BOM）
@@ -34,6 +42,7 @@ VIAddVersionKey "LegalCopyright" "© ${PUBLISHER}"
 !define MUI_FINISHPAGE_RUN_TEXT "立即启动 XFlow"
 !insertmacro MUI_PAGE_FINISH
 
+!insertmacro MUI_UNPAGE_WELCOME
 !insertmacro MUI_UNPAGE_CONFIRM
 !insertmacro MUI_UNPAGE_INSTFILES
 !insertmacro MUI_LANGUAGE "SimpChinese"
