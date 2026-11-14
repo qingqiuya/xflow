@@ -10,11 +10,13 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/anacrolix/torrent/metainfo"
 	webview2 "github.com/pgmsoul/go-webview2"
@@ -41,7 +43,11 @@ func main() {
 	// 以前 alreadyRunning() 写好了却从来没人调用——表面上"只起一个"其实是
 	// 第二个实例抢 17777 端口失败 panic 掉的假象（2026-11-10 清秋发现）。
 	if alreadyRunning() {
-		// 已经有一个在跑：把它的窗口叫到前面来，自己退出
+		// 已经有一个在跑：把命令行里的 URL 转给它（插件/浏览器协议拉起的场景），
+		// 再把它的窗口叫到前面来，自己退出。
+		if u, n := parseLaunchURL(os.Args[1:]); u != "" {
+			forwardToRunning(u, n)
+		}
 		showWin()
 		return
 	}
@@ -404,4 +410,49 @@ func orDefault(s, d string) string {
 		return d
 	}
 	return s
+}
+
+// parseLaunchURL 从命令行里抠出要下载的 URL。
+// 支持三种形态：xflow://add?url=...&name=... / --url <url> / 裸 http(s) URL
+func parseLaunchURL(args []string) (string, string) {
+	for i, a := range args {
+		a = strings.TrimSpace(a)
+		low := strings.ToLower(a)
+		if strings.HasPrefix(low, "xflow://") {
+			if u, err := url.Parse(a); err == nil {
+				q := u.Query()
+				return q.Get("url"), q.Get("name")
+			}
+		}
+		if (a == "--url" || a == "-url" || a == "--add") && i+1 < len(args) {
+			return args[i+1], ""
+		}
+	}
+	for _, a := range args {
+		if strings.HasPrefix(a, "http://") || strings.HasPrefix(a, "https://") {
+			return a, ""
+		}
+	}
+	return "", ""
+}
+
+// forwardToRunning 把任务 POST 给已经在跑的那个实例（端口写在 .localdl-port）
+func forwardToRunning(rawurl, name string) bool {
+	home, _ := os.UserHomeDir()
+	b, err := os.ReadFile(filepath.Join(home, ".localdl-port"))
+	if err != nil {
+		return false
+	}
+	port := strings.TrimSpace(string(b))
+	if port == "" {
+		return false
+	}
+	body, _ := json.Marshal(map[string]any{"url": rawurl, "name": name})
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Post("http://127.0.0.1:"+port+"/api/add", "application/json", bytes.NewReader(body))
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode == 200
 }

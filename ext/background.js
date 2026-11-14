@@ -83,6 +83,22 @@ async function notify(title, message) {
   }
 }
 
+// 下载器没启动时，用自定义协议 xflow:// 把它拉起来（2026-11-14）
+// 浏览器不允许扩展直接执行本地程序，只能靠协议；第一次会弹一次确认框。
+function launchApp(url, name) {
+  try {
+    const q = new URLSearchParams({ url: url, name: name || "" }).toString();
+    const proto = "xflow://add?" + q;
+    chrome.tabs.create({ url: proto, active: false }, (tab) => {
+      setTimeout(() => {
+        if (tab && tab.id) chrome.tabs.remove(tab.id, () => void chrome.runtime.lastError);
+      }, 1500);
+    });
+  } catch (e) {
+    /* 协议没注册就算了 */
+  }
+}
+
 // 推任务给 XFlow；失败抛错，调用方据此决定是否取消浏览器下载
 async function push(url, name, referer, cookie, dir) {
   const body = JSON.stringify({
@@ -93,11 +109,18 @@ async function push(url, name, referer, cookie, dir) {
     dir: dir || "",
     segs: C.segs,
   });
-  const r = await fetch(api("/api/add"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body,
-  });
+  let r;
+  try {
+    r = await fetch(api("/api/add"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+    });
+  } catch (e) {
+    // 端口都不通 = 下载器没开，拉它一把
+    launchApp(url, name);
+    throw new Error("XFlow 没在运行，已尝试拉起（第一次会弹确认框）");
+  }
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   const j = await r.json().catch(() => ({}));
   if (j.ok === false) throw new Error(j.err || "下载器拒绝了任务");

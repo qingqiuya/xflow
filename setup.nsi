@@ -66,6 +66,12 @@ Section "Install"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
   CreateShortCut "$SMPROGRAMS\${APPNAME}\卸载 ${APPNAME}.lnk" "$INSTDIR\Uninstall.exe"
 
+  ; 自定义协议 xflow:// —— 让浏览器插件能拉起没启动的下载器（2026-11-14）
+  WriteRegStr HKCU "Software\Classes\xflow" "" "URL:XFlow Downloader"
+  WriteRegStr HKCU "Software\Classes\xflow" "URL Protocol" ""
+  WriteRegStr HKCU "Software\Classes\xflow\DefaultIcon" "" "$INSTDIR\app.ico"
+  WriteRegStr HKCU "Software\Classes\xflow\shell\open\command" "" '"$INSTDIR\${APPEXE}" "%1"'
+
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "DisplayName" "${APPNAME} 下载器"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "DisplayVersion" "${APPVERSION}"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "Publisher" "${PUBLISHER}"
@@ -95,5 +101,6 @@ Section "Uninstall"
   Delete "$SMPROGRAMS\${APPNAME}\卸载 ${APPNAME}.lnk"
   RMDir "$SMPROGRAMS\${APPNAME}"
   Delete "$DESKTOP\${APPNAME}.lnk"
+  DeleteRegKey HKCU "Software\Classes\xflow"
   DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}"
 SectionEnd
