@@ -82,7 +82,13 @@ Section "Install"
   WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "NoRepair" 1
 SectionEnd
 
+; 开机自启（最小化到托盘）。默认勾选，装完开机就静默进托盘，不弹窗口。
+Section "开机自启（启动后进托盘）" SEC_AUTOSTART
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "XFlow" '"$INSTDIR\${APPEXE}" --tray'
+SectionEnd
+
 Section "Uninstall"
+  DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "XFlow"
   DetailPrint "关闭正在运行的 XFlow…"
   nsExec::Exec 'taskkill /IM XFlow.exe /F /T'
   Pop $0
