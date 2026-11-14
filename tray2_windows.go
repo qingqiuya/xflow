@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 	"unsafe"
@@ -27,11 +28,17 @@ var trayIconBytes []byte
 // 不碰任何扩展样式、不玩 owner、不装 watcher。
 
 var (
-	procCreateWindowEx2 = modUser32.NewProc("CreateWindowExW")
-	procShowWindow2     = modUser32.NewProc("ShowWindow")
-	procSetForeground2  = modUser32.NewProc("SetForegroundWindow")
-	procInvalidateRect  = modUser32.NewProc("InvalidateRect")
-	procUpdateWindow    = modUser32.NewProc("UpdateWindow")
+	procEnumWindows              = modUser32.NewProc("EnumWindows")
+	procGetWindowThreadProcessId = modUser32.NewProc("GetWindowThreadProcessId")
+	procIsWindowVisible          = modUser32.NewProc("IsWindowVisible")
+	procGetClassName             = modUser32.NewProc("GetClassNameW")
+	procGetWindowTextW2          = modUser32.NewProc("GetWindowTextW")
+	procGetCurrentProcessId2     = syscall.NewLazyDLL("kernel32.dll").NewProc("GetCurrentProcessId")
+	procCreateWindowEx2          = modUser32.NewProc("CreateWindowExW")
+	procShowWindow2              = modUser32.NewProc("ShowWindow")
+	procSetForeground2           = modUser32.NewProc("SetForegroundWindow")
+	procInvalidateRect           = modUser32.NewProc("InvalidateRect")
+	procUpdateWindow             = modUser32.NewProc("UpdateWindow")
 )
 
 // ownerHwnd 是一个永远不可见的 0x0 窗口（带 WS_EX_TOOLWINDOW）。
@@ -79,12 +86,43 @@ func showWin() {
 	procUpdateWindow.Call(h)
 }
 
+// hideWin 把本进程所有可见的顶层窗口都 SW_HIDE。
+// 2026-11-14：只按标题找主窗口藏不干净——WebView2 会留一个只有最小化/最大化/关闭
+// 按钮的空框（那是 WebView2 自己的宿主窗口）。改成按 pid 枚举，一个都不留。
 func hideWin() {
-	h := findWin()
-	logTray(fmt.Sprintf("hideWin: hwnd=%#x", h))
-	if h != 0 {
-		procShowWindow2.Call(h, 6) // SW_HIDE
-	}
+	logTray("hideWin: 枚举本进程窗口")
+	hideAllOwnWindows()
+}
+
+func hideAllOwnWindows() int {
+	pid := uint32(0)
+	p, _, _ := procGetCurrentProcessId2.Call()
+	pid = uint32(p)
+	n := 0
+	cb := syscall.NewCallback(func(h uintptr, _ uintptr) uintptr {
+		var wpid uint32
+		procGetWindowThreadProcessId.Call(h, uintptr(unsafe.Pointer(&wpid)))
+		if wpid != pid {
+			return 1
+		}
+		vis, _, _ := procIsWindowVisible.Call(h)
+		if vis == 0 {
+			return 1
+		}
+		// 别把托盘自己的窗口藏了（getlantern/systray 用 SystrayClass）
+		var buf [64]uint16
+		procGetClassName.Call(h, uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
+		cls := syscall.UTF16ToString(buf[:])
+		if strings.Contains(strings.ToLower(cls), "systray") {
+			return 1
+		}
+		procShowWindow2.Call(h, 0) // SW_HIDE
+		logTray(fmt.Sprintf("hideWin: %#x class=%s", h, cls))
+		n++
+		return 1
+	})
+	procEnumWindows.Call(cb, 0)
+	return n
 }
 
 func logTray(msg string) {
