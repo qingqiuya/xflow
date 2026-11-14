@@ -15,7 +15,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/anacrolix/torrent/metainfo"
 	webview2 "github.com/pgmsoul/go-webview2"
@@ -382,6 +381,7 @@ func main() {
 			Width:   1000,
 			Height:  700,
 			Default: true,
+			Hidden:  startHidden, // 自启模式：创建就不显示，不闪
 		},
 		OnClose: func(w webview2.WebView) {
 			// 点 × 不退出，缩到托盘
@@ -396,20 +396,6 @@ func main() {
 	defer w.Destroy()
 	w.Navigate("http://127.0.0.1:" + strconv.Itoa(port))
 
-	if startHidden {
-		// 自启模式：等窗口建好就藏到托盘，任务栏不留图标
-		go func() {
-			for i := 0; i < 60; i++ {
-				time.Sleep(50 * time.Millisecond)
-				if findWin() != 0 {
-					// 等首帧画完再藏（不再设 TOOLWINDOW，那会把标题栏的最小化/最大化干掉）
-					time.Sleep(200 * time.Millisecond)
-					hideWin()
-					return
-				}
-			}
-		}()
-	}
 	w.Run()
 }
 

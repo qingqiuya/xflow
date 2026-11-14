@@ -83,6 +83,10 @@ type WindowOptions struct {
 	// 必须在创建时就传进去——事后 SetWindowLongPtr(GWLP_HWNDPARENT) 不生效
 	// （窗口已经进过任务栏了）。Wails 那边验证过这套在 Win10/11 都稳。
 	Owner uintptr
+
+	// Hidden 为 true 时创建后不显示窗口（不闪一下），适合开机自启直接进托盘。
+	// 2026-11-14 夏尔加：原来创建完无条件 ShowWindow，自启模式必然闪一帧。
+	Hidden bool
 }
 
 type WebViewOptions struct {
@@ -402,9 +406,11 @@ func (w *webview) CreateWithOptions(opts WindowOptions) bool {
 	}
 	setWindowContext(w.hwnd, w)
 
-	_, _, _ = w32.User32ShowWindow.Call(w.hwnd, w32.SWShow)
-	_, _, _ = w32.User32UpdateWindow.Call(w.hwnd)
-	_, _, _ = w32.User32SetFocus.Call(w.hwnd)
+	if !opts.Hidden {
+		_, _, _ = w32.User32ShowWindow.Call(w.hwnd, w32.SWShow)
+		_, _, _ = w32.User32UpdateWindow.Call(w.hwnd)
+		_, _, _ = w32.User32SetFocus.Call(w.hwnd)
+	}
 
 	if !w.browser.Embed(w.hwnd) {
 		return false
