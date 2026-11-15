@@ -27,6 +27,28 @@ var uiFS embed.FS
 
 var mgr *Manager
 
+// trayMode：--tray 启动（窗口隐藏 + 托盘常驻）。
+// 这种模式下来新任务时把窗口显示出来 —— 清秋 2026-11-15 要的「默认不占屏幕、
+// 下载时才弹出来」，和 Linux 版 1.6.10 的行为对齐。
+var trayMode bool
+
+// showTrayWindow 给 HTTP handler 用：把隐藏的主窗口叫出来（找不到就重试几次，
+// 因为窗口是主线程异步建的，可能比第一次请求晚）。
+func showTrayWindow() {
+	if !trayMode {
+		return
+	}
+	go func() {
+		for i := 0; i < 40; i++ {
+			if findWin() != 0 {
+				showWin()
+				return
+			}
+			time.Sleep(150 * time.Millisecond)
+		}
+	}()
+}
+
 func main() {
 	defer func() {
 		if r := recover(); r != nil {
@@ -98,6 +120,7 @@ func main() {
 			} else {
 				mgr.AddHTTP(src, orDefault(d.Name, fileNameFromURL(src)), dir, d.Segs)
 			}
+			showTrayWindow()
 			json.NewEncoder(w).Encode(map[string]any{"ok": true})
 			return
 		}
@@ -138,6 +161,7 @@ func main() {
 		}
 		if strings.HasPrefix(src, "magnet:") || strings.HasSuffix(strings.ToLower(src), ".torrent") {
 			j := mgr.AddBT(src, orDefault(name, "BT 任务"), dir)
+			showTrayWindow()
 			json.NewEncoder(w).Encode(map[string]any{"ok": true, "id": j.ID})
 			return
 		}
@@ -153,6 +177,7 @@ func main() {
 			json.NewEncoder(w).Encode(map[string]any{"ok": false, "err": err.Error()})
 			return
 		}
+		showTrayWindow()
 		json.NewEncoder(w).Encode(map[string]any{"ok": true, "id": j.ID, "name": name})
 	})
 
@@ -204,6 +229,7 @@ func main() {
 			dir = currentDir()
 		}
 		j := mgr.AddBT(tmp.Name(), strings.TrimSuffix(name, filepath.Ext(name)), dir)
+		showTrayWindow()
 		json.NewEncoder(w).Encode(map[string]any{"ok": true, "id": j.ID, "name": name})
 	})
 	mux.HandleFunc("/api/job/", func(w http.ResponseWriter, r *http.Request) {
@@ -395,6 +421,7 @@ func main() {
 	if !startHidden {
 		if _, err := os.Stat(filepath.Join(home, ".localdl-tray")); err == nil {
 			startHidden = true
+			trayMode = true
 		}
 	}
 
