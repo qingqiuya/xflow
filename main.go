@@ -364,15 +364,29 @@ func main() {
 	os.WriteFile(filepath.Join(home, ".localdl-port"), []byte(strconv.Itoa(port)), 0644)
 	go http.Serve(ln, withCORS(mux))
 
+	// --headless：只跑 HTTP 服务和下载引擎，不建窗口、不起托盘。
+	// 给「ssh / 计划任务 / 无桌面会话」的场景用 —— session 0 里建 WebView2 窗口
+	// 会直接 panic（nil pointer），所以这种环境必须跳过窗口。
+	// 用法：XFlow.exe --headless [--url <链接>]；停止就 taskkill /IM XFlow.exe /F。
+	headless := false
+	startHidden := false
+	for _, a := range os.Args[1:] {
+		switch a {
+		case "--tray", "-tray", "--hidden":
+			startHidden = true
+		case "--headless", "-headless":
+			headless = true
+		}
+	}
+	if headless {
+		os.WriteFile(filepath.Join(home, "xflow-headless.log"),
+			[]byte(time.Now().Format(time.RFC3339)+" headless 启动，端口 "+strconv.Itoa(port)+"\n"), 0644)
+		select {}
+	}
+
 	darkenWindowTitle("XFlow")
 	startTray()
 
-	startHidden := false
-	for _, a := range os.Args[1:] {
-		if a == "--tray" || a == "-tray" || a == "--hidden" {
-			startHidden = true
-		}
-	}
 	// 也认一个标记文件：计划任务的启动参数容易丢（schtasks /change /tr 加不了参数），
 	// 有这个文件就静默启动到托盘，不再依赖命令行开关。
 	if !startHidden {
