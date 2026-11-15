@@ -96,6 +96,15 @@ func main() {
 	})
 
 	// 界面右上角显示版本号，也能给脚本探活用
+	mux.HandleFunc("/api/update", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("force") != "" {
+			updateMu.Lock()
+			updateCached = nil
+			updateMu.Unlock()
+		}
+		json.NewEncoder(w).Encode(checkUpdate())
+	})
+
 	mux.HandleFunc("/api/version", func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{"version": Version})
 	})

@@ -169,6 +169,17 @@ fetch('/api/version').then(r=>r.json()).then(d=>{
   const e=document.querySelector('#ver');
   if(e && d && d.version) e.textContent = 'v' + d.version;
 }).catch(()=>{});
+// 更新检查：GitHub 上有更新的 tag 就在版本号旁边提示，点一下跳下载页
+fetch('/api/update').then(r=>r.json()).then(d=>{
+  if(!d || !d.hasUpdate) return;
+  const e=document.querySelector('#ver');
+  if(!e) return;
+  e.textContent = 'v' + d.current + ' → v' + d.latest;
+  e.title = '有新版本，点击去下载';
+  e.style.color = '#4ea1ff';
+  e.style.cursor = 'pointer';
+  e.onclick = () => window.open(d.url || 'https://github.com/qingqiuya/xflow/releases', '_blank');
+}).catch(()=>{});
 
 let browsePath='';
 function esc2(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}

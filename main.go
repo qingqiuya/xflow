@@ -183,6 +183,16 @@ func main() {
 		w.Write(b)
 	})
 	// 界面右上角显示版本号，也能给脚本探活用
+	// 更新检查：去 GitHub 看最新 tag。前端拿到 hasUpdate 就提示。
+	mux.HandleFunc("/api/update", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("force") != "" {
+			updateMu.Lock()
+			updateCached = nil
+			updateMu.Unlock()
+		}
+		json.NewEncoder(w).Encode(checkUpdate())
+	})
+
 	mux.HandleFunc("/api/version", func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{"version": Version})
 	})
