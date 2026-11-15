@@ -263,17 +263,37 @@ const APIDOC = [
  '#   读接口（/api/jobs、/api/version）和页面本身不需要 token。'
 ].join('\n');
 
+const randHex = n => [...crypto.getRandomValues(new Uint8Array(n))].map(b=>b.toString(16).padStart(2,'0')).join('');
+
+let setCtx = {ip:'', port:17777, token:''};
+
+function refreshSetUI(){
+  const lan = [...document.querySelectorAll('input[name=lst]')].find(x=>x.checked)?.value === 'lan';
+  const tok = setCtx.token || '';
+  $('#setTok').value = lan ? (tok || '（保存时自动生成）') : '（本机模式不需要）';
+  $('#setHint').innerHTML = lan
+    ? '别的机器用：<b>http://' + esc(setCtx.ip) + ':' + setCtx.port + '/api/add</b>（必须带 X-Token）'
+    : '当前只有本机能连。改成局域网后，同网段设备可用 <b>http://' + esc(setCtx.ip) + ':' + setCtx.port + '/</b>';
+  $('#setDoc').textContent = APIDOC
+    .replace(/<地址>/g, lan ? setCtx.ip : '127.0.0.1')
+    .replace(/<令牌>/g, lan ? (tok || '（保存后生成）') : '（本机模式不用）');
+}
+
+function bindSetRadios(){
+  document.querySelectorAll('input[name=lst]').forEach(el=>{
+    el.onchange = refreshSetUI;
+    el.onclick = refreshSetUI;   // 有些环境只触发 click
+  });
+}
+
 async function openSettings(){
   const r = await (await fetch('/api/settings')).json();
   const s = r.settings || {};
   document.querySelectorAll('input[name=lst]').forEach(el=>{ el.checked = (el.value === (s.listen||'local')) });
-  $('#setTok').value = s.token || '（本机模式不需要）';
-  $('#setTok').dataset.real = s.token || '';
-  const ip = r.lanIP || '（找不到局域网 IP）';
-  $('#setHint').innerHTML = (s.listen === 'lan')
-    ? '别的机器用：<b>http://' + esc(ip) + ':' + (r.port||17777) + '/api/add</b>（记得带 X-Token）'
-    : '当前只有本机能连。改成局域网后，同网段设备可用 <b>http://' + esc(ip) + ':' + (r.port||17777) + '/</b>';
-  $('#setDoc').textContent = APIDOC.replace(/<地址>/g, s.listen === 'lan' ? ip : '127.0.0.1').replace(/<令牌>/g, s.token || '（本机模式不用）');
+  setCtx = {ip: r.lanIP || '（找不到局域网 IP）', port: r.port || 17777,
+            token: s.token || randHex(16)};
+  bindSetRadios();
+  refreshSetUI();
   $('#setMask').style.display='flex';
 }
 $('#settingsBtn').onclick = openSettings;
@@ -284,11 +304,14 @@ $('#setRot').onclick = async ()=>{
 };
 $('#setOk').onclick = async ()=>{
   const listen = [...document.querySelectorAll('input[name=lst]')].find(x=>x.checked)?.value || 'local';
-  const r = await (await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({listen})})).json();
+  const tok = (setCtx.token || '').trim();
+  const r = await (await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({listen, token: listen==='lan' ? tok : ''})})).json();
   if(!r.ok){ alert('保存失败：'+(r.err||'')); return }
+  setCtx.token = r.settings.token || setCtx.token;
+  refreshSetUI();
   $('#setMask').style.display='none';
   alert(listen==='lan'
-    ? '已切换为局域网模式，重启汐流后生效。\n令牌：' + (r.settings.token||'') + '\n别的机器调用时带上 X-Token。'
+    ? '已切换为局域网模式，重启汐流后生效。\n令牌：' + (r.settings.token||'') + '\n别的机器调用时带请求头 X-Token。'
     : '已切回仅本机模式，重启汐流后生效。');
 };
 
