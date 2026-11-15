@@ -6,3 +6,8 @@ import _ "embed"
 //
 //go:embed assets/bg.jpg
 var bgJPG []byte
+
+// 界面左上角的小图标（和 exe 图标同一张）
+//
+//go:embed assets/icon.png
+var iconPNG []byte

@@ -125,6 +125,12 @@ func main() {
 		json.NewEncoder(w).Encode(map[string]any{"ok": true, "id": j.ID, "name": info.AssetName, "version": info.Latest})
 	})
 
+	mux.HandleFunc("/icon.png", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		w.Header().Set("Cache-Control", "max-age=86400")
+		w.Write(iconPNG)
+	})
+
 	// 界面背景图（嵌在 exe 里）
 	mux.HandleFunc("/bg.jpg", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/jpeg")
