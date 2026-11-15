@@ -62,6 +62,7 @@ $BT/aapt2 compile --dir $APP/res -o $OUT/res.zip
 echo "[2/6] 链接资源 + 生成 R.java"
 $BT/aapt2 link -o $OUT/base.apk -I "$PLATFORM" \
   --manifest $APP/AndroidManifest.xml -R $OUT/res.zip -A "$ASSETS" \
+  --min-sdk-version 26 --target-sdk-version 34 \
   --java $OUT/gen --auto-add-overlay
 
 echo "[2.5/6] 解 AAR（BT 引擎）"

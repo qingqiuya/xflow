@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="AppTheme" parent="@android:style/Theme.Material.NoActionBar">
-        <item name="android:windowBackground">#0b0d12</item>
+        <!-- 窗口背景直接用背景图：这样连同手势条/导航栏区域一起铺满，
+             不会像 ImageView 那样被内容区高度卡住留一条黑 -->
+        <item name="android:windowBackground">@drawable/bg</item>
         <item name="android:statusBarColor">#0b0d12</item>
         <item name="android:navigationBarColor">#0b0d12</item>
         <item name="android:windowLightStatusBar">false</item>

@@ -53,6 +53,9 @@ public class MainActivity extends Activity {
         // Android 15 上手势导航会强制 edge-to-edge，只设 navigationBarColor 不管用，
         // 底部会留一条黑。这里手动让内容铺到全屏，再用 insets 把控件推回安全区，
         // 这样背景（以后换背景图也一样）就一路铺到底。
+        // FLAG_LAYOUT_NO_LIMITS：让窗口真的铺到状态栏/手势条下面。
+        // 只靠 setDecorFitsSystemWindows(false) 在 MIUI 上不生效，底部会留一条纯黑。
+        win.addFlags(android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS);
         if (android.os.Build.VERSION.SDK_INT >= 30) {
             win.setDecorFitsSystemWindows(false);
             final android.view.View root = findViewById(android.R.id.content);
@@ -60,7 +63,14 @@ public class MainActivity extends Activity {
                 android.graphics.Insets bars = ins.getInsets(
                         android.view.WindowInsets.Type.systemBars() |
                         android.view.WindowInsets.Type.displayCutout());
-                v.setPadding(bars.left, bars.top, bars.right, bars.bottom);
+                // 底部不缩：让背景图一路铺到手势条底下（不然那里会留一条黑）
+                v.setPadding(bars.left, bars.top, bars.right, 0);
+                // 可滚动区域自己加上底部安全距离，避免最后一条任务被手势条压住
+                android.view.View sv = findViewById(R.id.jobScroll);
+                if (sv != null) {
+                    sv.setPadding(sv.getPaddingLeft(), sv.getPaddingTop(),
+                            sv.getPaddingRight(), bars.bottom + dp(16));
+                }
                 return ins;
             });
         }
