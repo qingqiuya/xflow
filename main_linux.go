@@ -96,6 +96,8 @@ func main() {
 	})
 
 	// 界面右上角显示版本号，也能给脚本探活用
+	registerSettingsAPI(mux)
+
 	mux.HandleFunc("/api/update", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("force") != "" {
 			updateMu.Lock()
@@ -359,8 +361,8 @@ func main() {
 		json.NewEncoder(w).Encode(map[string]any{"ok": true, "version": Version})
 	})
 
-	// 只听本机回环：要用别处的机器管理，走 SSH 隧道
-	addr := "127.0.0.1:" + strconv.Itoa(*port)
+	// 默认只听本机回环；设置里可以改成局域网（会自动带 token 校验）
+	addr := listenAddr(*port)
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "监听 %s 失败：%v\n", addr, err)
@@ -379,8 +381,9 @@ func main() {
 		os.Exit(0)
 	}()
 
+	needTok := loadSettings().Listen == "lan"
 	go func() {
-		if err := http.Serve(ln, withCORS(mux)); err != nil {
+		if err := http.Serve(ln, withCORS(guardMux(mux, needTok))); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}

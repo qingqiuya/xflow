@@ -59,6 +59,13 @@ button:active{transform:scale(.97)}
 .mask.on{display:flex}
 .dlg{width:560px;max-height:70vh;background:#141821;border:1px solid var(--line);border-radius:14px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)}
 .dlg-hd{padding:14px 16px;font-weight:600;border-bottom:1px solid var(--line)}
+.set-body{padding:14px 16px;display:flex;flex-direction:column;gap:10px;overflow:auto}
+.set-row{display:flex;align-items:center;gap:10px;font-size:13px}
+.set-row label{display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--fg)}
+.set-row input[type=text],.set-row input:not([type]){flex:1;background:#0a0d12;border:1px solid var(--line);color:var(--fg);padding:7px 9px;border-radius:7px;font-size:12.5px}
+.set-hint{font-size:12px;color:var(--dim);line-height:1.6}
+.set-doc summary{cursor:pointer;color:var(--acc);font-size:12.5px;padding:4px 0}
+.set-doc pre{margin-top:6px;background:#0a0d12;border:1px solid var(--line);border-radius:8px;padding:10px;font-size:11.5px;line-height:1.55;color:#b9c2d4;overflow:auto;max-height:220px;white-space:pre-wrap;word-break:break-all}
 .dlg-path{padding:10px 16px;color:var(--dim);font-size:12.5px;border-bottom:1px solid var(--line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:#0f121a}
 .dlg-q{display:flex;gap:6px;flex-wrap:wrap;padding:9px 14px;border-bottom:1px solid var(--line);background:#11141b}
 .dlg-q button{background:#1c2230;color:var(--fg);padding:5px 11px;font-size:12.3px;border-radius:7px;font-weight:500}
@@ -88,6 +95,7 @@ button:active{transform:scale(.97)}
     <button class="ghost" id="dir">下载目录</button>
     <button class="ghost" id="clear">清空已完成</button>
     <button class="ghost" id="hide">隐藏到托盘</button>
+    <button class="ghost" id="settingsBtn" title="对外接口 / API 用法">设置</button>
   </div>
 </div>
 <div class="mask" id="mask"><div class="dlg">
@@ -97,6 +105,25 @@ button:active{transform:scale(.97)}
   <div class="dlg-list" id="dlgList"></div>
   <div class="dlg-ft"><button class="ghost" id="dlgUp">上一级</button><span class="grow"></span>
   <button class="ghost" id="dlgCancel">取消</button><button class="primary" id="dlgOk">用这个目录</button></div>
+</div></div>
+<div class="mask" id="setMask" style="display:none"><div class="dlg">
+  <div class="dlg-hd">设置 · 对外接口</div>
+  <div class="set-body">
+    <div class="set-row">
+      <label><input type="radio" name="lst" value="local"> 仅本机（127.0.0.1，默认）</label>
+      <label><input type="radio" name="lst" value="lan"> 局域网（0.0.0.0，需令牌）</label>
+    </div>
+    <div class="set-hint" id="setHint"></div>
+    <div class="set-row">
+      <span style="width:44px">令牌</span>
+      <input id="setTok" readonly style="font-family:ui-monospace,Consolas,monospace">
+      <button class="ghost" id="setRot">重新生成</button>
+    </div>
+    <details class="set-doc"><summary>API 调用方式</summary><pre id="setDoc"></pre></details>
+  </div>
+  <div class="dlg-ft"><span class="grow"></span>
+    <button class="ghost" id="setCancel">关闭</button>
+    <button class="primary" id="setOk">保存</button></div>
 </div></div>
 <div class="list" id="list"><div class="empty"><b>⬇</b>还没有任务</div></div>
 <script>
@@ -214,6 +241,57 @@ fetch('/api/update').then(r=>r.json()).then(d=>{
     }
   };
 }).catch(()=>{});
+
+// ---- 设置 / API 文档 ----
+const APIDOC = [
+ '# 加一个下载任务（dir 可留空=用当前下载目录）',
+ 'curl -X POST http://<地址>:17777/api/add \\',
+ '  -H "Content-Type: application/json" -H "X-Token: <令牌>" \\',
+ '  -d \'{"url":"https://example.com/a.iso","name":"","dir":""}\'',
+ '',
+ '# 看任务列表 / 版本 / 更新',
+ 'curl http://<地址>:17777/api/jobs',
+ 'curl http://<地址>:17777/api/version',
+ 'curl http://<地址>:17777/api/update',
+ '',
+ '# 暂停 / 继续 / 删除',
+ 'curl -X POST   http://<地址>:17777/api/job/<id>/pause',
+ 'curl -X POST   http://<地址>:17777/api/job/<id>/resume',
+ 'curl -X DELETE http://<地址>:17777/api/job/<id>',
+ '',
+ '# 说明：默认只绑 127.0.0.1。改成局域网后，',
+ '#   POST/DELETE 这些「写」接口必须带 X-Token（也可用 ?token= 或 Bearer xxx）；',
+ '#   读接口（/api/jobs、/api/version）和页面本身不需要 token。'
+].join('\n');
+
+async function openSettings(){
+  const r = await (await fetch('/api/settings')).json();
+  const s = r.settings || {};
+  document.querySelectorAll('input[name=lst]').forEach(el=>{ el.checked = (el.value === (s.listen||'local')) });
+  $('#setTok').value = s.token || '（本机模式不需要）';
+  $('#setTok').dataset.real = s.token || '';
+  const ip = r.lanIP || '（找不到局域网 IP）';
+  $('#setHint').innerHTML = (s.listen === 'lan')
+    ? '别的机器用：<b>http://' + esc(ip) + ':' + (r.port||17777) + '/api/add</b>（记得带 X-Token）'
+    : '当前只有本机能连。改成局域网后，同网段设备可用 <b>http://' + esc(ip) + ':' + (r.port||17777) + '/</b>';
+  $('#setDoc').textContent = APIDOC.replace(/<地址>/g, s.listen === 'lan' ? ip : '127.0.0.1').replace(/<令牌>/g, s.token || '（本机模式不用）');
+  $('#setMask').style.display='flex';
+}
+$('#settingsBtn').onclick = openSettings;
+$('#setCancel').onclick = ()=>{ $('#setMask').style.display='none' };
+$('#setRot').onclick = async ()=>{
+  const r = await (await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rotate:true})})).json();
+  if(r.ok && r.settings){ $('#setTok').value = r.settings.token || ''; $('#setTok').dataset.real = r.settings.token || ''; alert('令牌已重新生成，重启汐流后生效') }
+};
+$('#setOk').onclick = async ()=>{
+  const listen = [...document.querySelectorAll('input[name=lst]')].find(x=>x.checked)?.value || 'local';
+  const r = await (await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({listen})})).json();
+  if(!r.ok){ alert('保存失败：'+(r.err||'')); return }
+  $('#setMask').style.display='none';
+  alert(listen==='lan'
+    ? '已切换为局域网模式，重启汐流后生效。\n令牌：' + (r.settings.token||'') + '\n别的机器调用时带上 X-Token。'
+    : '已切回仅本机模式，重启汐流后生效。');
+};
 
 let browsePath='';
 function esc2(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}

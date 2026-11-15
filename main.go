@@ -183,6 +183,8 @@ func main() {
 		w.Write(b)
 	})
 	// 界面右上角显示版本号，也能给脚本探活用
+	registerSettingsAPI(mux)
+
 	// 更新检查：去 GitHub 看最新 tag。前端拿到 hasUpdate 就提示。
 	mux.HandleFunc("/api/update", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("force") != "" {
@@ -500,7 +502,8 @@ func main() {
 
 	// 固定端口：插件要知道往哪发，随机端口做不到。17777 被占才退回随机。
 	// 只听本机回环：别的机器要派任务走 SSH（本机 curl 或 -L 隧道），不对外开端口。
-	ln, err := net.Listen("tcp", "127.0.0.1:17777")
+	apiAddr := listenAddr(17777)
+	ln, err := net.Listen("tcp", apiAddr)
 	if err != nil {
 		ln, err = net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {
@@ -509,9 +512,11 @@ func main() {
 	}
 	port := ln.Addr().(*net.TCPAddr).Port
 	servePort = port
+	currentPort = port
 	// 把端口写到文件，方便外部（另一台机器/脚本/插件安装说明）调用 API
 	os.WriteFile(filepath.Join(home, ".localdl-port"), []byte(strconv.Itoa(port)), 0644)
-	go http.Serve(ln, withCORS(mux))
+	needTok := loadSettings().Listen == "lan"
+	go http.Serve(ln, withCORS(guardMux(mux, needTok)))
 
 	// --headless：只跑 HTTP 服务和下载引擎，不建窗口、不起托盘。
 	// 给「ssh / 计划任务 / 无桌面会话」的场景用 —— session 0 里建 WebView2 窗口
