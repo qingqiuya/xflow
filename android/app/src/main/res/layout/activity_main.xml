@@ -136,13 +136,16 @@
             android:id="@+id/torrentBtn"
             android:layout_width="wrap_content"
             android:layout_height="50dp"
-            android:layout_marginStart="9dp"
-            android:text="种子"
+            android:layout_marginStart="8dp"
+            android:text="上传种子文件"
             android:textColor="#c9d2e3"
-            android:textSize="13.5sp"
+            android:textSize="13sp"
             android:background="@drawable/btn_small_bg"
             android:stateListAnimator="@null"
-            android:paddingHorizontal="18dp" />
+            android:paddingHorizontal="14dp"
+            android:minWidth="0dp"
+            android:insetLeft="0dp"
+            android:insetRight="0dp" />
     </LinearLayout>
 
     <!-- 任务区头 -->
