@@ -74,7 +74,10 @@ func findWin() uintptr {
 
 func showWin() {
 	h := findWin()
-	logTray(fmt.Sprintf("showWin: hwnd=%#x", h))
+	// 2026-11-15 排查「--tray 启动后窗口自己冒出来」：把调用者打出来
+	pc, file, line, _ := runtime.Caller(1)
+	logTray(fmt.Sprintf("showWin: hwnd=%#x caller=%s:%d(%s)", h,
+		filepath.Base(file), line, runtime.FuncForPC(pc).Name()))
 	if h == 0 {
 		return
 	}
