@@ -27,9 +27,9 @@ import java.util.Map;
  */
 public class ApiServer {
 
-    // 高位端口：8080/8081/8000 这些运营商和公共 WiFi 都爱封，
-    // 28460 避开家里已用的 28443/28444，也在常见扫描器的兴趣范围外
-    public static final int DEFAULT_PORT = 28460;
+    // 跟桌面版 XFlow 用同一个端口，两端记一个数就行。
+    // 17777 不是 80/443/8080 那种重点封控对象，运营商走公网也过得去。
+    public static final int DEFAULT_PORT = 17777;
 
     private final Context ctx;
     private volatile String token = "";
