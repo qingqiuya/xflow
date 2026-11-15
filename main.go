@@ -140,10 +140,14 @@ func main() {
 	if alreadyRunning() {
 		// 已经有一个在跑：把命令行里的 URL 转给它（插件/浏览器协议拉起的场景），
 		// 再把它的窗口叫到前面来，自己退出。
+		// 只有真的带着任务来才把窗口叫出来。
+		// 以前这里无条件 showWin()，结果是「多一个自启点」就等于「开机必弹窗」——
+		// 2026-11-15 查到机器上同时有 Run 键和计划任务两处自启，第二个实例一启动
+		// 就把第一个实例藏着的窗口叫出来了。
 		if u, n := parseLaunchURL(os.Args[1:]); u != "" {
 			forwardToRunning(u, n)
+			showWin()
 		}
-		showWin()
 		return
 	}
 
