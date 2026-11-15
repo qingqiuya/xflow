@@ -91,11 +91,10 @@ button:active{transform:scale(.97)}
     <span id="stat">就绪</span>
     <span class="grow"></span>
     <input type="file" id="torrentFile" hidden>
-    <button class="ghost" id="torrentBtn" title="选一个 .torrent 文件加任务">种子文件</button>
+    <button class="ghost" id="torrentBtn" title="选一个 .torrent 文件加任务">上传种子文件</button>
     <button class="ghost" id="dir">下载目录</button>
-    <button class="ghost" id="clear">清空已完成</button>
-    <button class="ghost" id="hide">隐藏到托盘</button>
-    <button class="ghost" id="settingsBtn" title="对外接口 / API 用法">设置</button>
+    <button class="ghost" id="clear" title="清掉已完成/失败的历史记录">清空历史</button>
+    <button class="ghost" id="settingsBtn" title="对外接口 / API 用法">调用 API 下载</button>
   </div>
 </div>
 <div class="mask" id="mask"><div class="dlg">
@@ -317,6 +316,6 @@ $('#dlgOk').onclick=async()=>{
   if(r.ok){ dirShown=browsePath; $('#mask').classList.remove('on'); load(); }
 };
 $('#clear').onclick=async()=>{await fetch('/api/clear');load()};
-$('#hide').onclick=async()=>{await fetch('/api/hide');};
+
 load();setInterval(load,1000);
 </script></body></html>
