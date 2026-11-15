@@ -32,6 +32,8 @@ import xflowmobile.Xflowmobile;
 public class MainActivity extends Activity {
 
     private EditText urlEdit, nameEdit;
+    private ApiServer api;
+    private Beacon beacon;
     private LinearLayout jobList;
     private TextView statText;
     private final Handler ui = new Handler(Looper.getMainLooper());
@@ -49,6 +51,67 @@ public class MainActivity extends Activity {
             win.setNavigationBarContrastEnforced(false);
         }
         setContentView(R.layout.activity_main);
+
+        // ---- 手机端 API（默认关，点右上角 API 打开）
+        final android.content.SharedPreferences prefs =
+                getSharedPreferences("xflow", MODE_PRIVATE);
+        api = new ApiServer(this);
+        beacon = new Beacon(this);
+        try {
+            beacon.setSelfName(android.os.Build.MODEL == null ? "android" : android.os.Build.MODEL);
+        } catch (Exception ignored) {
+        }
+        final TextView apiChip = findViewById(R.id.apiChip);
+        boolean apiOn = prefs.getBoolean("api_enabled", false);
+        if (apiOn) api.start(ApiServer.DEFAULT_PORT);
+        // Android 16 起「访问局域网」是运行时权限，不请求的话 mDNS 会报
+        // SecurityException: Missing local network permission
+        if (android.os.Build.VERSION.SDK_INT >= 36) {
+            try {
+                requestPermissions(new String[]{"android.permission.ACCESS_LOCAL_NETWORK"}, 9001);
+            } catch (Exception ignored) {
+            }
+        }
+        // 广播常开：只告诉别人「我在这、叫什么、HTTP 端口多少」，
+        // 不加任务不动数据，所以不用等用户点开关
+        beacon.start(ApiServer.DEFAULT_PORT);
+        paintApiChip(apiChip, apiOn);
+        apiChip.setOnClickListener(v -> {
+            boolean now = !api.isRunning();
+            if (now) {
+                api.start(ApiServer.DEFAULT_PORT);
+                if (beacon != null && !beacon.isRunning()) beacon.start(ApiServer.DEFAULT_PORT);
+                if (!api.isRunning()) {
+                    Toast.makeText(this, "API 起不来（端口被占？）", Toast.LENGTH_SHORT).show();
+                    paintApiChip(apiChip, false);
+                    return;
+                }
+            } else {
+                api.stop();   // 广播留着，只是不接受操作
+            }
+            prefs.edit().putBoolean("api_enabled", now).apply();
+            paintApiChip(apiChip, now);
+            Toast.makeText(this, now ? "API 已开：http://" + localIP() + ":" + ApiServer.DEFAULT_PORT
+                    : "API 已关", Toast.LENGTH_SHORT).show();
+        });
+
+        // ---- 清空历史
+        TextView clearBtn = findViewById(R.id.clearBtn);
+        clearBtn.setOnClickListener(v -> {
+            int n = 0;
+            synchronized (DownloadService.JOBS) {
+                for (int i = DownloadService.JOBS.size() - 1; i >= 0; i--) {
+                    Job j = DownloadService.JOBS.get(i);
+                    if ("done".equals(j.state) || "error".equals(j.state)) {
+                        DownloadService.JOBS.remove(i);
+                        n++;
+                    }
+                }
+            }
+            Toast.makeText(this, n > 0 ? "清掉了 " + n + " 条历史" : "没有可清的历史",
+                    Toast.LENGTH_SHORT).show();
+            ui.post(render);
+        });
 
         // Android 15 上手势导航会强制 edge-to-edge，只设 navigationBarColor 不管用，
         // 底部会留一条黑。这里手动让内容铺到全屏，再用 insets 把控件推回安全区，
@@ -128,6 +191,69 @@ public class MainActivity extends Activity {
         });
 
         ui.post(render);
+    }
+
+    /** 发现的设备：显示名字 + IP，点一下就复制地址 */
+    private void renderPeers() {
+        LinearLayout box = findViewById(R.id.peerList);
+        if (box == null) return;
+        java.util.List<Beacon.Peer> list = Beacon.alive();
+        if (list.isEmpty()) {
+            box.setVisibility(View.GONE);
+            return;
+        }
+        box.setVisibility(View.VISIBLE);
+        if (box.getChildCount() != list.size()) {
+            box.removeAllViews();
+            for (Beacon.Peer p : list) {
+                TextView tv = new TextView(this);
+                tv.setTextSize(11.5f);
+                tv.setTextColor(0xFF8B93A7);
+                tv.setPadding(0, dp(2), 0, dp(2));
+                tv.setText("· " + (p.name.isEmpty() ? p.ip : p.name) + "  " + p.ip + ":" + p.port);
+                final String addr = "http://" + p.ip + ":" + p.port;
+                tv.setOnClickListener(v -> {
+                    android.content.ClipboardManager cm =
+                            (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                    cm.setPrimaryClip(android.content.ClipData.newPlainText("XFlow", addr));
+                    Toast.makeText(this, "已复制 " + addr, Toast.LENGTH_SHORT).show();
+                });
+                box.addView(tv);
+            }
+        } else {
+            for (int i = 0; i < list.size(); i++) {
+                Beacon.Peer p = list.get(i);
+                ((TextView) box.getChildAt(i)).setText(
+                        "· " + (p.name.isEmpty() ? p.ip : p.name) + "  " + p.ip + ":" + p.port);
+            }
+        }
+    }
+
+    private void paintApiChip(TextView chip, boolean on) {
+        if (chip == null) return;
+        chip.setText(on ? "API 开" : "API");
+        chip.setTextColor(on ? 0xFF3DDC84 : 0xFF5B6478);
+        chip.setBackgroundResource(R.drawable.chip_bg);
+    }
+
+    private String localIP() {
+        try {
+            java.util.Enumeration<java.net.NetworkInterface> en =
+                    java.net.NetworkInterface.getNetworkInterfaces();
+            while (en.hasMoreElements()) {
+                java.net.NetworkInterface ni = en.nextElement();
+                if (ni.isLoopback() || !ni.isUp()) continue;
+                java.util.Enumeration<java.net.InetAddress> addrs = ni.getInetAddresses();
+                while (addrs.hasMoreElements()) {
+                    java.net.InetAddress a = addrs.nextElement();
+                    if (a instanceof java.net.Inet4Address && !a.isLoopbackAddress()) {
+                        return a.getHostAddress();
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return "本机IP";
     }
 
     // ---------------------------------------------------------------- 检查更新
@@ -325,6 +451,8 @@ public class MainActivity extends Activity {
                 }
                 statText.setText(s);
             }
+
+            renderPeers();
 
             // 数量变了就重建，否则原地更新
             if (jobList.getChildCount() != jobs.size()) {
@@ -622,5 +750,14 @@ public class MainActivity extends Activity {
 
     private int dp(int v) {
         return (int) (v * getResources().getDisplayMetrics().density);
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (isFinishing()) {
+            if (api != null) api.stop();
+            if (beacon != null) beacon.stop();
+        }
+        super.onDestroy();
     }
 }

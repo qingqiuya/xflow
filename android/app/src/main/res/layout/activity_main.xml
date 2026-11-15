@@ -46,6 +46,18 @@
         </LinearLayout>
 
         <TextView
+            android:id="@+id/apiChip"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="API"
+            android:textColor="#5b6478"
+            android:textSize="11sp"
+            android:background="@drawable/chip_bg"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="4dp"
+            android:layout_marginEnd="7dp" />
+
+        <TextView
             android:id="@+id/verText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -160,6 +172,17 @@
             android:text=""
             android:textColor="#8b93a7"
             android:textSize="11.5sp" />
+
+        <TextView
+            android:id="@+id/clearBtn"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="清空历史"
+            android:textColor="#8b93a7"
+            android:textSize="11.5sp"
+            android:background="@drawable/chip_bg"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="5dp" />
     </LinearLayout>
 
     <ScrollView
@@ -172,11 +195,26 @@
         android:paddingBottom="16dp"
         android:scrollbars="none">
 
+        <!-- ScrollView 只能有一个直接子 View，所以外面再包一层 -->
         <LinearLayout
-            android:id="@+id/jobList"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical" />
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:id="@+id/jobList"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+
+            <LinearLayout
+                android:id="@+id/peerList"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone"
+                android:layout_marginTop="14dp" />
+        </LinearLayout>
     </ScrollView>
     </LinearLayout>
 </FrameLayout>
