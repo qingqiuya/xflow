@@ -83,17 +83,20 @@ async function notify(title, message) {
   }
 }
 
-// 下载器没启动时，用自定义协议 xflow:// 把它拉起来（2026-11-14）
-// 浏览器不允许扩展直接执行本地程序，只能靠协议；第一次会弹一次确认框。
+// 下载器没启动时，用自定义协议 xflow:// 把它拉起来。
+// 浏览器不允许扩展直接执行本地程序，只能靠协议；而 **service worker 里直接
+// tabs.create("xflow://…") 会被 Edge/Chrome 静默拦掉**（没有用户手势）。
+// 2026-11-15 清秋在 9950 上实测：地址栏手输同一个 xflow:// 链接能拉起窗口，
+// 插件拉不动 —— 所以改成开一个自带的中间页，用户点一下按钮（那一下点击就是
+// 合规的用户手势），再由页面跳 xflow://，浏览器才会弹确认框并放行。
 function launchApp(url, name) {
   try {
     const q = new URLSearchParams({ url: url, name: name || "" }).toString();
-    const proto = "xflow://add?" + q;
-    chrome.tabs.create({ url: proto, active: false }, (tab) => {
-      setTimeout(() => {
-        if (tab && tab.id) chrome.tabs.remove(tab.id, () => void chrome.runtime.lastError);
-      }, 1500);
-    });
+    const target =
+      chrome.runtime.getURL("launch.html") +
+      "#" +
+      encodeURIComponent("xflow://add?" + q);
+    chrome.tabs.create({ url: target, active: true }, () => void chrome.runtime.lastError);
   } catch (e) {
     /* 协议没注册就算了 */
   }
@@ -119,7 +122,7 @@ async function push(url, name, referer, cookie, dir) {
   } catch (e) {
     // 端口都不通 = 下载器没开，拉它一把
     launchApp(url, name);
-    throw new Error("XFlow 没在运行，已尝试拉起（第一次会弹确认框）");
+    throw new Error("XFlow 没在运行，已打开启动页（点一下按钮就能拉起来）");
   }
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   const j = await r.json().catch(() => ({}));

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>启动汐流</title>
+<style>
+  :root { color-scheme: light dark; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: flex; align-items: center; justify-content: center;
+    font: 15px/1.6 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    background: #0f1115; color: #e6e8ec;
+  }
+  .card { max-width: 460px; padding: 32px 36px; text-align: center; }
+  .ico { width: 64px; height: 64px; margin-bottom: 12px; }
+  h1 { margin: 0 0 8px; font-size: 19px; font-weight: 600; }
+  .fname {
+    margin: 0 0 20px; font-size: 13px; color: #9aa3b2;
+    overflow-wrap: anywhere; max-height: 3em; overflow: hidden;
+  }
+  a.btn {
+    display: inline-block; padding: 11px 26px; border-radius: 10px;
+    background: #3b82f6; color: #fff; text-decoration: none;
+    font-size: 15px; font-weight: 600; transition: background .15s;
+  }
+  a.btn:hover { background: #2f6fe0; }
+  .tip { margin: 18px 0 0; font-size: 12.5px; color: #7d8697; }
+  .warn { margin: 10px 0 0; font-size: 13px; color: #f0a34a; }
+</style>
+</head>
+<body>
+<div class="card">
+  <img class="ico" src="icon128.png" alt="">
+  <h1>汐流没在运行</h1>
+  <p class="fname" id="fname"></p>
+  <a class="btn" id="go" href="#" hidden>启动汐流并继续下载</a>
+  <p class="tip">浏览器要求这一步由你点一下（扩展没权限自己启动程序）。<br>点完会弹一次确认框，允许后窗口自己起来，任务会自动送进去。</p>
+  <p class="warn" id="bad" hidden>链接参数丢了，请回上一页重新点下载。</p>
+</div>
+<script src="launch.js"></script>
+</body>
+</html>
