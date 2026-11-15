@@ -1,39 +1,40 @@
 #!/bin/bash
-# 构建 XFlow，并把产物发到发布位置。
+# 汐流发版一条龙：编译 → 打包 → tag → push(github+nas) → gh release → 镜像资产到 NAS
 #
-# 用法:
-#   ./release.sh            # 版本号从 setup.nsi 读
-#   ./release.sh 1.2.0      # 指定版本号
-#
-# 发布目标通过环境变量给，没配就只构建不发：
-#   XFLOW_RELEASE_HOST   例如 myserver.lan          （ssh/scp 的目标主机）
-#   XFLOW_RELEASE_DIR    例如 /srv/releases/xflow   （目标机器上的父目录）
-#
-# 产物：XFlow.exe（单文件）、XFlow-Setup.exe（NSIS 安装包）、SHA256SUMS
+# 用法： ./release.sh 1.6.32 [--notes "发版说明"]
 set -e
-VER=${1:-$(grep -oP 'APPVERSION "\K[0-9.]+' setup.nsi | head -1)}
-HOST="${XFLOW_RELEASE_HOST:-}"
-BASE="${XFLOW_RELEASE_DIR:-/srv/releases/xflow}"
-DIR="$BASE/$VER"
+VER="${1:-}"
+if [ -z "$VER" ]; then echo "用法: ./release.sh <版本号> [--notes 说明]"; exit 1; fi
+shift || true
+NOTES="汐流 XFlow $VER"
+if [ "${1:-}" = "--notes" ]; then NOTES="${2:-$NOTES}"; fi
 
-echo "生成第三方许可清单 ..."
-python3 tools/gen-licenses.py
+cd "$(dirname "$0")"
+echo "== 1/5 编译 Windows + Linux"
+CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "-H windowsgui -s -w -X main.Version=$VER" -o /tmp/XFlow-$VER.exe .
+CGO_ENABLED=1 go build -tags webkit2_41 -ldflags "-s -w -X main.Version=$VER" -o /tmp/xflow-linux-$VER .
 
-echo "构建 XFlow $VER ..."
-CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "-H windowsgui -s -w -X main.Version=$VER" -o XFlow.exe .
-rsrc -ico app.ico -manifest app.manifest -o rsrc.syso -arch amd64 2>/dev/null || true
+echo "== 2/5 打包（安装包 / deb / crx / 便携版）"
+cp /tmp/XFlow-$VER.exe XFlow.exe
+sed -i "s/!define APPVERSION \"[^\"]*\"/!define APPVERSION \"$VER\"/" setup.nsi
+sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$VER\"/" ext/manifest.json
+./pack-crx.sh >/dev/null
+./pack-deb.sh "$VER" >/dev/null
 makensis setup.nsi >/dev/null
+cp XFlow-Setup.exe "dist/XFlow-Setup-$VER.exe"
+cp "/tmp/XFlow-$VER.exe" "dist/XFlow-portable-$VER.exe"
 
-if [ -z "$HOST" ]; then
-  echo "构建完成（没设 XFLOW_RELEASE_HOST，跳过上传）"
-  echo "  XFlow.exe               $(du -h XFlow.exe | cut -f1)"
-  echo "  XFlow-Setup.exe         $(du -h XFlow-Setup.exe | cut -f1)"
-  echo "  LICENSE / THIRD_PARTY_LICENSES.md（单文件下载的人也要拿到许可）"
-  exit 0
-fi
+echo "== 3/5 tag + push"
+git add -A && git commit -m "发版 $VER" >/dev/null 2>&1 || true
+git tag -f "v$VER"
+git push github HEAD && git push nas HEAD && git push -f github "v$VER"
 
-echo "上传到 $HOST:$DIR ..."
-ssh "$HOST" "mkdir -p $DIR"
-scp -q XFlow.exe XFlow-Setup.exe LICENSE THIRD_PARTY_LICENSES.md "$HOST:$DIR/"
-ssh "$HOST" "cd $DIR && sha256sum XFlow.exe XFlow-Setup.exe LICENSE THIRD_PARTY_LICENSES.md > SHA256SUMS && ls -lh"
-echo "发布完成：$HOST:$DIR"
+echo "== 4/5 gh release"
+gh release create "v$VER" --title "$NOTES" --notes "$NOTES" \
+  "dist/XFlow-Setup-$VER.exe" "dist/XFlow-portable-$VER.exe" \
+  "dist/xflow_${VER}_amd64.deb" "dist/xflow-ext-$VER.crx"
+
+echo "== 5/5 镜像到 NAS"
+~/bin/mirror-xflow-releases.sh "v$VER"
+ssh qingqiu@10.11.11.13 "echo v$VER > /mnt/nas/releases/xflow/LATEST && ln -sfn v$VER /mnt/nas/releases/xflow/latest"
+echo "完成：v$VER"
