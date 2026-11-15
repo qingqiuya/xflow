@@ -177,6 +177,7 @@ func main() {
 	mgr.StartTicker()
 
 	mux := http.NewServeMux()
+	registerDiscoveryAPI(mux)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		b, _ := uiFS.ReadFile("ui.html")
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -531,6 +532,8 @@ func main() {
 	needTok := loadSettings().Listen == "lan"
 	setAPIListener(ln, mux)
 	go http.Serve(ln, withCORS(guardMux(mux, needTok)))
+	startDiscovery(port, needTok)
+	defer stopDiscovery()
 
 	// --headless：只跑 HTTP 服务和下载引擎，不建窗口、不起托盘。
 	// 给「ssh / 计划任务 / 无桌面会话」的场景用 —— session 0 里建 WebView2 窗口

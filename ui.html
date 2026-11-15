@@ -89,6 +89,11 @@ button:active{transform:scale(.97)}
     <input id="name" placeholder="文件名（可留空）" style="flex:0 0 150px">
     <button class="primary" id="add">开始下载</button>
   </div>
+  <div class="bar-top" id="peersBar" style="display:none">
+    <span style="color:var(--dim);font-size:12.5px">局域网</span>
+    <span id="peers" style="display:flex;gap:6px;flex-wrap:wrap"></span>
+    <span class="grow"></span>
+  </div>
   <div class="bar-top">
     <span id="stat">就绪</span>
     <span class="grow"></span>

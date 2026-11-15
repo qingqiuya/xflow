@@ -84,6 +84,7 @@ func main() {
 	mgr.StartTicker()
 
 	mux := http.NewServeMux()
+	registerDiscoveryAPI(mux)
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
@@ -397,6 +398,9 @@ func main() {
 	needTok := loadSettings().Listen == "lan"
 	setAPIListener(ln, mux)
 	go func() {
+		// 局域网发现（mDNS）：注册自己 + 浏览手机等设备
+		startDiscovery(*port, needTok)
+		defer stopDiscovery()
 		if err := http.Serve(ln, withCORS(guardMux(mux, needTok))); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
