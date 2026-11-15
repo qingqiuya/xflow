@@ -39,7 +39,31 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
+        // 状态栏/导航栏都刷成同一个底色
+        android.view.Window win = getWindow();
+        win.setStatusBarColor(0xFF0b0d12);
+        win.setNavigationBarColor(0xFF0b0d12);
+        if (android.os.Build.VERSION.SDK_INT >= 29) {
+            win.setNavigationBarDividerColor(0xFF0b0d12);
+            win.setStatusBarContrastEnforced(false);
+            win.setNavigationBarContrastEnforced(false);
+        }
         setContentView(R.layout.activity_main);
+
+        // Android 15 上手势导航会强制 edge-to-edge，只设 navigationBarColor 不管用，
+        // 底部会留一条黑。这里手动让内容铺到全屏，再用 insets 把控件推回安全区，
+        // 这样背景（以后换背景图也一样）就一路铺到底。
+        if (android.os.Build.VERSION.SDK_INT >= 30) {
+            win.setDecorFitsSystemWindows(false);
+            final android.view.View root = findViewById(android.R.id.content);
+            root.setOnApplyWindowInsetsListener((v, ins) -> {
+                android.graphics.Insets bars = ins.getInsets(
+                        android.view.WindowInsets.Type.systemBars() |
+                        android.view.WindowInsets.Type.displayCutout());
+                v.setPadding(bars.left, bars.top, bars.right, bars.bottom);
+                return ins;
+            });
+        }
         urlEdit = findViewById(R.id.urlEdit);
         nameEdit = findViewById(R.id.nameEdit);
         jobList = findViewById(R.id.jobList);
@@ -59,17 +83,19 @@ public class MainActivity extends Activity {
             });
         }
 
-        // 副标题后面跟版本号：直接从包信息里读，不另外硬编码
+        // 版本号单独放在右上角 chip 里，点它查更新；副标题点开看许可
         TextView sub = findViewById(R.id.subText);
-        if (sub != null) {
-            try {
-                String v = getPackageManager()
-                        .getPackageInfo(getPackageName(), 0).versionName;
-                sub.setText("汐流 · 把文件带下来 · v" + v);
-            } catch (Exception ignored) {
-            }
-            // 点副标题看开源许可（APK 里没有 ActionBar，不另开菜单）
-            sub.setOnClickListener(v -> showLicenses());
+        if (sub != null) sub.setOnClickListener(v -> showLicenses());
+        TextView verText = findViewById(R.id.verText);
+        String myVer = "";
+        try {
+            myVer = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+        } catch (Exception ignored) {
+        }
+        if (verText != null) {
+            verText.setText("v" + myVer);
+            final String vv = myVer;
+            verText.setOnClickListener(v -> checkUpdate(vv));
         }
 
         Button add = findViewById(R.id.addBtn);
@@ -92,6 +118,65 @@ public class MainActivity extends Activity {
         });
 
         ui.post(render);
+    }
+
+    // ---------------------------------------------------------------- 检查更新
+    //
+    // 查 GitHub 的 latest release，比较 tag 和本地 versionName。
+    // 国内网络可能连不上，失败就静默（点一下没反应比弹错误好）。
+
+    private void checkUpdate(String myVer) {
+        Toast.makeText(this, "检查中…", Toast.LENGTH_SHORT).show();
+        new Thread(() -> {
+            String tag = null, html = null, err = null;
+            try {
+                java.net.HttpURLConnection c = (java.net.HttpURLConnection)
+                        new java.net.URL("https://api.github.com/repos/qingqiuya/xflow/releases/latest")
+                                .openConnection();
+                c.setRequestProperty("User-Agent", "XFlow/" + myVer);
+                c.setRequestProperty("Accept", "application/vnd.github+json");
+                c.setConnectTimeout(8000);
+                c.setReadTimeout(8000);
+                if (c.getResponseCode() == 200) {
+                    StringBuilder sb = new StringBuilder();
+                    try (java.io.BufferedReader br = new java.io.BufferedReader(
+                            new java.io.InputStreamReader(c.getInputStream(), "UTF-8"))) {
+                        String line;
+                        while ((line = br.readLine()) != null) sb.append(line);
+                    }
+                    org.json.JSONObject o = new org.json.JSONObject(sb.toString());
+                    tag = o.optString("tag_name", "").replaceFirst("^v", "");
+                    html = o.optString("html_url", "");
+                } else {
+                    err = "HTTP " + c.getResponseCode();
+                }
+            } catch (Exception e) {
+                err = e.getMessage();
+            }
+            final String t = tag, h = html, er = err;
+            ui.post(() -> {
+                if (t == null || t.isEmpty()) {
+                    Toast.makeText(this, "查不到更新（" + (er == null ? "网络" : er) + "）", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                if (t.equals(myVer)) {
+                    Toast.makeText(this, "已经是最新版本 v" + myVer, Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                new AlertDialog.Builder(this)
+                        .setTitle("发现新版本 v" + t)
+                        .setMessage("当前 v" + myVer + " → 最新 v" + t + "\n\n要用浏览器打开下载页吗？")
+                        .setPositiveButton("去下载", (d, w) -> {
+                            try {
+                                startActivity(new Intent(Intent.ACTION_VIEW,
+                                        android.net.Uri.parse(h)));
+                            } catch (Exception ignored) {
+                            }
+                        })
+                        .setNegativeButton("算了", null)
+                        .show();
+            });
+        }).start();
     }
 
     // ---------------------------------------------------------------- 开源许可
@@ -248,47 +333,75 @@ public class MainActivity extends Activity {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setBackgroundResource(R.drawable.card_bg);
-        box.setPadding(dp(12), dp(10), dp(12), dp(10));
+        box.setPadding(dp(14), dp(12), dp(14), dp(11));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        lp.bottomMargin = dp(8);
+        lp.bottomMargin = dp(10);
         box.setLayoutParams(lp);
+
+        // 第一行：文件名 + 状态徽章
+        LinearLayout top = new LinearLayout(this);
+        top.setOrientation(LinearLayout.HORIZONTAL);
+        top.setGravity(android.view.Gravity.CENTER_VERTICAL);
 
         TextView name = new TextView(this);
         name.setTextColor(0xFFE8EBF2);
-        name.setTextSize(14);
+        name.setTextSize(14.5f);
         name.setText(j.name);
         name.setSingleLine(true);
-        box.addView(name);
+        name.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
+        top.addView(name, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
+        TextView badge = new TextView(this);
+        badge.setTextSize(10.5f);
+        badge.setPadding(dp(7), dp(2), dp(7), dp(2));
+        badge.setBackgroundResource(R.drawable.chip_bg);
+        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        blp.leftMargin = dp(8);
+        top.addView(badge, blp);
+        box.addView(top);
+
+        // 第二行：元信息（速度、进度、并发）
         TextView meta = new TextView(this);
         meta.setTextColor(0xFF8B93A7);
-        meta.setTextSize(12);
-        meta.setPadding(0, dp(3), 0, dp(6));
+        meta.setTextSize(11.5f);
+        meta.setPadding(0, dp(5), 0, dp(9));
         box.addView(meta);
 
+        // 进度条：蓝→绿渐变
         ProgressBar pb = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         pb.setMax(100);
-        pb.setProgressTintList(android.content.res.ColorStateList.valueOf(0xFF4CC2FF));
-        pb.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(0xFF0B0E13));
+        pb.setProgressDrawable(getResources().getDrawable(R.drawable.progress_fill, null));
         box.addView(pb, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(6)));
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(7)));
 
-        // 分段条：每段一格，能看出哪段在跑、哪段卡住（跟桌面版一样分段看进度）
+        // 分段条
         LinearLayout segBar = new LinearLayout(this);
         segBar.setOrientation(LinearLayout.HORIZONTAL);
         LinearLayout.LayoutParams segLp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(5));
-        segLp.topMargin = dp(3);
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(4));
+        segLp.topMargin = dp(5);
         box.addView(segBar, segLp);
 
-        // 操作按钮
+        // 操作行：右对齐小按钮
         LinearLayout ops = new LinearLayout(this);
         ops.setOrientation(LinearLayout.HORIZONTAL);
-        ops.setPadding(0, dp(8), 0, 0);
+        ops.setGravity(android.view.Gravity.END);
+        ops.setPadding(0, dp(10), 0, 0);
         Button pause = smallButton("暂停");
         Button cancel = smallButton("删除");
         Button open = smallButton("打开");
+        LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, dp(32));
+        bp.leftMargin = dp(7);
+        pause.setLayoutParams(new LinearLayout.LayoutParams(bp));
+        cancel.setLayoutParams(new LinearLayout.LayoutParams(bp));
+        open.setLayoutParams(new LinearLayout.LayoutParams(bp));
+        pause.setPadding(dp(16), 0, dp(16), 0);
+        cancel.setPadding(dp(16), 0, dp(16), 0);
+        open.setPadding(dp(16), 0, dp(16), 0);
         ops.addView(pause);
         ops.addView(cancel);
         ops.addView(open);
@@ -317,7 +430,7 @@ public class MainActivity extends Activity {
 
         open.setOnClickListener(v -> openFile(j));
 
-        box.setTag(new Object[]{meta, pb, pause, open, segBar, cancel});
+        box.setTag(new Object[]{meta, pb, pause, open, segBar, cancel, badge});
         updateRow(box, j);
         return box;
     }
@@ -345,9 +458,35 @@ public class MainActivity extends Activity {
         Button open = (Button) tag[3];
         LinearLayout segBar = tag.length > 4 ? (LinearLayout) tag[4] : null;
         Button cancelBtn = tag.length > 5 ? (Button) tag[5] : null;
+        TextView badge = tag.length > 6 ? (TextView) tag[6] : null;
 
         pb.setProgress(j.percent());
         String state = j.state;
+        // 徽章配色：完成绿、出错红、下载中蓝、暂停灰
+        if (badge != null) {
+            switch (j.state) {
+                case "done":
+                    badge.setText("完成");
+                    badge.setTextColor(0xFF3DDC84);
+                    break;
+                case "error":
+                    badge.setText("出错");
+                    badge.setTextColor(0xFFE5534B);
+                    break;
+                case "paused":
+                    badge.setText("暂停");
+                    badge.setTextColor(0xFF8B93A7);
+                    break;
+                case "queued":
+                    badge.setText("排队");
+                    badge.setTextColor(0xFFB58BE0);
+                    break;
+                default:
+                    badge.setText("下载中");
+                    badge.setTextColor(0xFF4CC2FF);
+                    break;
+            }
+        }
         switch (state) {
             case "downloading":
                 state = "下载中";
@@ -393,8 +532,10 @@ public class MainActivity extends Activity {
             pb.setProgressTintList(android.content.res.ColorStateList.valueOf(0xFF3DDC84));
         } else if ("error".equals(j.state)) {
             pb.setProgressTintList(android.content.res.ColorStateList.valueOf(0xFFE5534B));
+        } else if ("paused".equals(j.state)) {
+            pb.setProgressTintList(android.content.res.ColorStateList.valueOf(0xFF5B6478));
         } else {
-            pb.setProgressTintList(android.content.res.ColorStateList.valueOf(0xFF4CC2FF));
+            pb.setProgressTintList(null);   // null = 用 drawable 里的蓝→绿渐变
         }
 
         // 分段条：每段一小格，满了变绿，正在跑的是蓝色

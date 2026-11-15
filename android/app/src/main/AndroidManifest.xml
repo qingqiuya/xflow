@@ -16,7 +16,7 @@
     <application
         android:label="XFlow"
         android:icon="@mipmap/ic_launcher"
-        android:theme="@android:style/Theme.Material.NoActionBar"
+        android:theme="@style/AppTheme"
         android:allowBackup="false"
         android:extractNativeLibs="true">
 
