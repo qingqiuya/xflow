@@ -76,29 +76,42 @@ public class MainActivity extends Activity {
         // 不加任务不动数据，所以不用等用户点开关
         beacon.start(ApiServer.DEFAULT_PORT);
         paintApiChip(apiChip, apiOn);
+        // 短按：没开就开；已经开了就看说明（避免手滑关掉）
+        // 长按：切换开关
         apiChip.setOnClickListener(v -> {
-            boolean now = !api.isRunning();
-            if (now) {
+            if (!api.isRunning()) {
                 api.start(ApiServer.DEFAULT_PORT);
-                if (beacon != null && !beacon.isRunning()) beacon.start(ApiServer.DEFAULT_PORT);
                 if (!api.isRunning()) {
                     Toast.makeText(this, "API 起不来（端口被占？）", Toast.LENGTH_SHORT).show();
                     paintApiChip(apiChip, false);
                     return;
                 }
+                prefs.edit().putBoolean("api_enabled", true).apply();
+                paintApiChip(apiChip, true);
+                Toast.makeText(this, "API 已开：http://" + localIP() + ":" + ApiServer.DEFAULT_PORT,
+                        Toast.LENGTH_SHORT).show();
             } else {
-                api.stop();   // 广播留着，只是不接受操作
+                showApiDoc();
             }
-            prefs.edit().putBoolean("api_enabled", now).apply();
-            paintApiChip(apiChip, now);
-            Toast.makeText(this, now ? "API 已开：http://" + localIP() + ":" + ApiServer.DEFAULT_PORT
-                    : "API 已关", Toast.LENGTH_SHORT).show();
         });
 
-        // 长按 API 看用法（短按是开关）
+        // 长按 API：切换开关
         if (apiChip != null) {
             apiChip.setOnLongClickListener(v -> {
-                showApiDoc();
+                boolean now = !api.isRunning();
+                if (now) {
+                    api.start(ApiServer.DEFAULT_PORT);
+                    if (!api.isRunning()) {
+                        Toast.makeText(this, "API 起不来（端口被占？）", Toast.LENGTH_SHORT).show();
+                        paintApiChip(apiChip, false);
+                        return true;
+                    }
+                } else {
+                    api.stop();
+                }
+                prefs.edit().putBoolean("api_enabled", now).apply();
+                paintApiChip(apiChip, now);
+                Toast.makeText(this, now ? "API 已开" : "API 已关", Toast.LENGTH_SHORT).show();
                 return true;
             });
         }
