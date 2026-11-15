@@ -95,6 +95,14 @@ public class MainActivity extends Activity {
                     : "API 已关", Toast.LENGTH_SHORT).show();
         });
 
+        // 长按 API 看用法（短按是开关）
+        if (apiChip != null) {
+            apiChip.setOnLongClickListener(v -> {
+                showApiDoc();
+                return true;
+            });
+        }
+
         // ---- 清空历史
         TextView clearBtn = findViewById(R.id.clearBtn);
         clearBtn.setOnClickListener(v -> {
@@ -227,6 +235,39 @@ public class MainActivity extends Activity {
                         "· " + (p.name.isEmpty() ? p.ip : p.name) + "  " + p.ip + ":" + p.port);
             }
         }
+    }
+
+    /** API 用法说明：接口、示例 curl，地址按当前开关状态给 */
+    private void showApiDoc() {
+        String ip = localIP();
+        int port = ApiServer.DEFAULT_PORT;
+        boolean on = api != null && api.isRunning();
+        String base = "http://" + ip + ":" + port;
+        String state = on ? "当前：已开启" : "当前：未开启（点一下 API 按钮打开）";
+        String doc =
+                state + "\n\n" +
+                        "地址：" + base + "\n\n" +
+                        "查版本\n  GET  " + base + "/api/version\n\n" +
+                        "查任务\n  GET  " + base + "/api/jobs\n\n" +
+                        "加任务\n  POST " + base + "/api/add?url=<链接>&name=<文件名>\n" +
+                        "       name 可留空，按链接自动取\n\n" +
+                        "清空历史（已完成/失败的）\n  POST " + base + "/api/clear\n\n" +
+                        "单个任务\n  POST " + base + "/api/job/<id>?action=pause|resume|delete\n\n" +
+                        "命令行示例\n" +
+                        "  curl \"" + base + "/api/jobs\"\n" +
+                        "  curl -X POST \"" + base + "/api/add?url=https://example.com/a.iso\"\n\n" +
+                        "注意：只在局域网内可用，不要把这个端口映射到公网。";
+        new AlertDialog.Builder(this)
+                .setTitle("手机端 API")
+                .setMessage(doc)
+                .setPositiveButton("好", null)
+                .setNeutralButton("复制地址", (d, w) -> {
+                    android.content.ClipboardManager cm =
+                            (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                    cm.setPrimaryClip(android.content.ClipData.newPlainText("XFlow", base));
+                    Toast.makeText(this, "已复制 " + base, Toast.LENGTH_SHORT).show();
+                })
+                .show();
     }
 
     private void paintApiChip(TextView chip, boolean on) {
