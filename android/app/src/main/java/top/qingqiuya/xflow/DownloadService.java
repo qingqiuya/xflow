@@ -385,7 +385,7 @@ public class DownloadService extends Service {
             c = (HttpURLConnection) new URL(j.url).openConnection();
             c.setConnectTimeout(15000);
             c.setReadTimeout(20000);
-            c.setRequestProperty("User-Agent", "XFlow/1.6.1 (Android)");
+            c.setRequestProperty("User-Agent", "XFlow/1.6.31 (Android)");
             c.setRequestProperty("Range", "bytes=0-0");
             c.setInstanceFollowRedirects(true);
             c.connect();
@@ -576,7 +576,7 @@ public class DownloadService extends Service {
                 c = (HttpURLConnection) new URL(j.url).openConnection();
                 c.setConnectTimeout(15000);
                 c.setReadTimeout(30000);
-                c.setRequestProperty("User-Agent", "XFlow/1.6.1 (Android)");
+                c.setRequestProperty("User-Agent", "XFlow/1.6.31 (Android)");
                 c.setRequestProperty("Range", "bytes=" + pos + "-" + s.to);
                 c.setInstanceFollowRedirects(true);
                 c.connect();
@@ -632,7 +632,7 @@ public class DownloadService extends Service {
             c = (HttpURLConnection) new URL(j.url).openConnection();
             c.setConnectTimeout(15000);
             c.setReadTimeout(30000);
-            c.setRequestProperty("User-Agent", "XFlow/1.1 (Android)");
+            c.setRequestProperty("User-Agent", "XFlow/1.6.31 (Android)");
             c.setInstanceFollowRedirects(true);
             if (j.done > 0) {
                 c.setRequestProperty("Range", "bytes=" + j.done + "-");
