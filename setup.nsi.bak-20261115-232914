@@ -1,0 +1,121 @@
+Unicode true
+!define APPNAME "XFlow"
+!define APPVERSION "1.6.5"
+!define PUBLISHER "qingqiuya"
+!define APPEXE "XFlow.exe"
+
+Name "${APPNAME}"
+OutFile "XFlow-Setup.exe"
+InstallDir "$LOCALAPPDATA\${APPNAME}"
+RequestExecutionLevel user
+SetCompressor /SOLID lzma
+Icon "app.ico"
+UninstallIcon "app.ico"
+
+VIProductVersion "1.6.0.0"
+VIAddVersionKey "ProductName" "${APPNAME}"
+VIAddVersionKey "FileDescription" "${APPNAME} 下载器"
+VIAddVersionKey "FileVersion" "${APPVERSION}"
+VIAddVersionKey "ProductVersion" "${APPVERSION}"
+VIAddVersionKey "CompanyName" "${PUBLISHER}"
+VIAddVersionKey "LegalCopyright" "© ${PUBLISHER}"
+
+!include "MUI2.nsh"
+!define MUI_ICON "app.ico"
+!define MUI_UNICON "app.ico"
+!define MUI_ABORTWARNING
+; 安装界面美化（2026-11-14）：欢迎页左图 + 每页顶部条，图都从 icon.jpg 生成
+!define MUI_HEADERIMAGE
+!define MUI_HEADERIMAGE_BITMAP "installer-header.bmp"
+!define MUI_HEADERIMAGE_RIGHT
+!define MUI_WELCOMEFINISHPAGE_BITMAP "installer-welcome.bmp"
+!define MUI_UNWELCOMEFINISHPAGE_BITMAP "installer-welcome.bmp"
+!define MUI_FINISHPAGE_SHOWREADME ""
+!define MUI_FINISHPAGE_SHOWREADME_NOTCHECKED
+
+!insertmacro MUI_PAGE_WELCOME
+; 许可页：MIT 正文 + 第三方组件声明（installer-license.txt 由 tools/gen-licenses.py 生成，UTF-8 带 BOM）
+!insertmacro MUI_PAGE_LICENSE "installer-license.txt"
+!insertmacro MUI_PAGE_DIRECTORY
+!insertmacro MUI_PAGE_INSTFILES
+!define MUI_FINISHPAGE_RUN "$INSTDIR\${APPEXE}"
+!define MUI_FINISHPAGE_RUN_TEXT "立即启动 XFlow"
+!insertmacro MUI_PAGE_FINISH
+
+!insertmacro MUI_UNPAGE_WELCOME
+!insertmacro MUI_UNPAGE_CONFIRM
+!insertmacro MUI_UNPAGE_INSTFILES
+!insertmacro MUI_LANGUAGE "SimpChinese"
+
+Section "Install"
+  ; 升级安装时先把正在跑的 XFlow 关掉：exe 被占用会导致写入失败，
+  ; 用户会看到「无法打开要写入的文件」。没在跑的话 taskkill 报错也无害。
+  DetailPrint "关闭正在运行的 XFlow…"
+  nsExec::Exec 'taskkill /IM XFlow.exe /F /T'
+  Pop $0
+  Sleep 800
+
+  SetOutPath "$INSTDIR"
+  File "XFlow.exe"
+  File "app.ico"
+  ; 浏览器接管插件（不预装，用户到 chrome://extensions 手动加载 unpacked）
+  File /r "ext"
+  File "浏览器插件-安装说明.txt"
+  ; 许可：MIT + 第三方组件全量原文（MPL/Apache/BSD 的分发义务）
+  File "LICENSE"
+  File "THIRD_PARTY_LICENSES.md"
+  File /r "licenses"
+
+  CreateDirectory "$SMPROGRAMS\${APPNAME}"
+  CreateShortCut "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk" "$INSTDIR\${APPEXE}" "" "$INSTDIR\app.ico" 0
+  CreateShortCut "$DESKTOP\${APPNAME}.lnk" "$INSTDIR\${APPEXE}" "" "$INSTDIR\app.ico" 0
+
+  CreateShortCut "$SMPROGRAMS\${APPNAME}\浏览器插件安装说明.lnk" "$INSTDIR\浏览器插件-安装说明.txt"
+
+  WriteUninstaller "$INSTDIR\Uninstall.exe"
+  CreateShortCut "$SMPROGRAMS\${APPNAME}\卸载 ${APPNAME}.lnk" "$INSTDIR\Uninstall.exe"
+
+  ; 自定义协议 xflow:// —— 让浏览器插件能拉起没启动的下载器（2026-11-14）
+  WriteRegStr HKCU "Software\Classes\xflow" "" "URL:XFlow Downloader"
+  WriteRegStr HKCU "Software\Classes\xflow" "URL Protocol" ""
+  WriteRegStr HKCU "Software\Classes\xflow\DefaultIcon" "" "$INSTDIR\app.ico"
+  WriteRegStr HKCU "Software\Classes\xflow\shell\open\command" "" '"$INSTDIR\${APPEXE}" "%1"'
+
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "DisplayName" "${APPNAME} 下载器"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "DisplayVersion" "${APPVERSION}"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "Publisher" "${PUBLISHER}"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "DisplayIcon" "$INSTDIR\app.ico"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "UninstallString" "$\"$INSTDIR\Uninstall.exe$\""
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "InstallLocation" "$INSTDIR"
+  WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "NoModify" 1
+  WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" "NoRepair" 1
+SectionEnd
+
+; 开机自启（最小化到托盘）。默认勾选，装完开机就静默进托盘，不弹窗口。
+Section "开机自启（启动后进托盘）" SEC_AUTOSTART
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "XFlow" '"$INSTDIR\${APPEXE}" --tray'
+SectionEnd
+
+Section "Uninstall"
+  DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "XFlow"
+  DetailPrint "关闭正在运行的 XFlow…"
+  nsExec::Exec 'taskkill /IM XFlow.exe /F /T'
+  Pop $0
+  Sleep 600
+  Delete "$INSTDIR\XFlow.exe"
+  Delete "$INSTDIR\app.ico"
+  Delete "$INSTDIR\浏览器插件-安装说明.txt"
+  Delete "$INSTDIR\LICENSE"
+  Delete "$INSTDIR\THIRD_PARTY_LICENSES.md"
+  RMDir /r "$INSTDIR\licenses"
+  RMDir /r "$INSTDIR\ext"
+  Delete "$INSTDIR\Uninstall.exe"
+  RMDir "$INSTDIR"
+  Delete "$SMPROGRAMS\${APPNAME}\浏览器插件安装说明.lnk"
+  Delete "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk"
+  Delete "$SMPROGRAMS\${APPNAME}\卸载 ${APPNAME}.lnk"
+  RMDir "$SMPROGRAMS\${APPNAME}"
+  Delete "$DESKTOP\${APPNAME}.lnk"
+  DeleteRegKey HKCU "Software\Classes\xflow"
+  DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}"
+SectionEnd
