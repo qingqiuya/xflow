@@ -57,7 +57,7 @@ button:active{transform:scale(.97)}
 .st{font-size:12.3px;color:var(--dim)}
 .mask{position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(2px);display:none;align-items:center;justify-content:center;z-index:50}
 .mask.on{display:flex}
-.dlg{width:560px;max-height:70vh;background:#141821;border:1px solid var(--line);border-radius:14px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.dlg{width:560px;max-height:82vh;background:#141821;border:1px solid var(--line);border-radius:14px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)}
 .dlg-hd{padding:14px 16px;font-weight:600;border-bottom:1px solid var(--line)}
 .set-body{padding:14px 16px;display:flex;flex-direction:column;gap:10px;overflow:auto}
 .set-row{display:flex;align-items:center;gap:10px;font-size:13px}
@@ -65,7 +65,7 @@ button:active{transform:scale(.97)}
 .set-row input[type=text],.set-row input:not([type]){flex:1;background:#0a0d12;border:1px solid var(--line);color:var(--fg);padding:7px 9px;border-radius:7px;font-size:12.5px}
 .set-hint{font-size:12px;color:var(--dim);line-height:1.6}
 .set-doc summary{cursor:pointer;color:var(--acc);font-size:12.5px;padding:4px 0}
-.set-doc pre{margin-top:6px;background:#0a0d12;border:1px solid var(--line);border-radius:8px;padding:10px;font-size:11.5px;line-height:1.55;color:#b9c2d4;overflow:auto;max-height:220px;white-space:pre-wrap;word-break:break-all}
+.set-doc pre{margin-top:6px;background:#0a0d12;border:1px solid var(--line);border-radius:8px;padding:10px;font-size:11.5px;line-height:1.55;color:#b9c2d4;overflow:auto;max-height:44vh;white-space:pre-wrap;word-break:break-all}
 .dlg-path{padding:10px 16px;color:var(--dim);font-size:12.5px;border-bottom:1px solid var(--line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:#0f121a}
 .dlg-q{display:flex;gap:6px;flex-wrap:wrap;padding:9px 14px;border-bottom:1px solid var(--line);background:#11141b}
 .dlg-q button{background:#1c2230;color:var(--fg);padding:5px 11px;font-size:12.3px;border-radius:7px;font-weight:500}
@@ -113,7 +113,7 @@ button:active{transform:scale(.97)}
       <label><input type="radio" name="lst" value="lan"> 局域网（0.0.0.0，需令牌）</label>
     </div>
     <div class="set-hint" id="setHint"></div>
-    <div class="set-row">
+    <div class="set-row" id="setTokRow">
       <span style="width:44px">令牌</span>
       <input id="setTok" readonly style="font-family:ui-monospace,Consolas,monospace">
       <button class="ghost" id="setRot">重新生成</button>
@@ -121,8 +121,7 @@ button:active{transform:scale(.97)}
     <details class="set-doc"><summary>API 调用方式</summary><pre id="setDoc"></pre></details>
   </div>
   <div class="dlg-ft"><span class="grow"></span>
-    <button class="ghost" id="setCancel">关闭</button>
-    <button class="primary" id="setOk">保存</button></div>
+    <button class="primary" id="setCancel">关闭</button></div>
 </div></div>
 <div class="list" id="list"><div class="empty"><b>⬇</b>还没有任务</div></div>
 <script>
@@ -270,7 +269,8 @@ let setCtx = {ip:'', port:17777, token:''};
 function refreshSetUI(){
   const lan = [...document.querySelectorAll('input[name=lst]')].find(x=>x.checked)?.value === 'lan';
   const tok = setCtx.token || '';
-  $('#setTok').value = lan ? (tok || '（保存时自动生成）') : '（本机模式不需要）';
+  $('#setTok').value = lan ? (tok || '（自动生成）') : '';
+  $('#setTokRow').style.display = lan ? 'flex' : 'none';
   $('#setHint').innerHTML = lan
     ? '别的机器用：<b>http://' + esc(setCtx.ip) + ':' + setCtx.port + '/api/add</b>（必须带 X-Token）'
     : '当前只有本机能连。改成局域网后，同网段设备可用 <b>http://' + esc(setCtx.ip) + ':' + setCtx.port + '/</b>';
@@ -279,10 +279,31 @@ function refreshSetUI(){
     .replace(/<令牌>/g, lan ? (tok || '（保存后生成）') : '（本机模式不用）');
 }
 
+async function applySettings(){
+  const listen = [...document.querySelectorAll('input[name=lst]')].find(x=>x.checked)?.value || 'local';
+  const token = listen === 'lan' ? (setCtx.token || '') : '';
+  try{
+    const r = await (await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({listen, token})})).json();
+    if(!r.ok){ alert('切换失败：' + (r.err||'')); return; }
+    setCtx.token = r.settings.token || setCtx.token;
+    refreshSetUI();
+    if(r.reloadErr) alert(r.reloadErr);
+  }catch(e){ alert('切换失败：' + e); }
+}
+
+let applying = false;
 function bindSetRadios(){
   document.querySelectorAll('input[name=lst]').forEach(el=>{
-    el.onchange = refreshSetUI;
-    el.onclick = refreshSetUI;   // 有些环境只触发 click
+    const go = async ()=>{
+      refreshSetUI();
+      if(applying) return;
+      applying = true;
+      await applySettings();
+      applying = false;
+    };
+    el.onchange = go;
+    el.onclick = go;   // 有些环境只触发 click
   });
 }
 
@@ -299,20 +320,14 @@ async function openSettings(){
 $('#settingsBtn').onclick = openSettings;
 $('#setCancel').onclick = ()=>{ $('#setMask').style.display='none' };
 $('#setRot').onclick = async ()=>{
-  const r = await (await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rotate:true})})).json();
-  if(r.ok && r.settings){ $('#setTok').value = r.settings.token || ''; $('#setTok').dataset.real = r.settings.token || ''; alert('令牌已重新生成，立即生效') }
-};
-$('#setOk').onclick = async ()=>{
-  const listen = [...document.querySelectorAll('input[name=lst]')].find(x=>x.checked)?.value || 'local';
-  const tok = (setCtx.token || '').trim();
-  const r = await (await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({listen, token: listen==='lan' ? tok : ''})})).json();
-  if(!r.ok){ alert('保存失败：'+(r.err||'')); return }
-  setCtx.token = r.settings.token || setCtx.token;
-  refreshSetUI();
-  $('#setMask').style.display='none';
-  alert(listen==='lan'
-    ? '已切换为局域网模式，重启汐流后生效。\n令牌：' + (r.settings.token||'') + '\n别的机器调用时带请求头 X-Token。'
-    : '已切回仅本机模式，重启汐流后生效。');
+  const lan = [...document.querySelectorAll('input[name=lst]')].find(x=>x.checked)?.value === 'lan';
+  if(!lan){ alert('先切到局域网模式才需要令牌'); return; }
+  const r = await (await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({listen:'lan', rotate:true})})).json();
+  if(r.ok && r.settings){
+    setCtx.token = r.settings.token || '';
+    refreshSetUI();
+  }
 };
 
 let browsePath='';
