@@ -21,7 +21,7 @@ echo "构建 Linux 二进制 $VER ..."
 # pkgconfig/ 里那个 webkit2gtk-4.0.pc 是给 Debian 13 用的：
 # 系统只提供 4.1，而 webview_go 写死找 4.0 —— 复制一份改名的照样能链。
 PKG_CONFIG_PATH="$(pwd)/pkgconfig" CGO_ENABLED=1 GOOS=linux GOARCH=$ARCH \
-  go build -ldflags "-s -w -X main.Version=$VER" -o "$STAGE/xflow" .
+  CGO_ENABLED=1 go build -tags webkit2_41 -ldflags "-s -w -X main.Version=$VER" -o "$STAGE/xflow" .
 
 PKG="$STAGE/pkg"
 mkdir -p "$PKG/DEBIAN" \
