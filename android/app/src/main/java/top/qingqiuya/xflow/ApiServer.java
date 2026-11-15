@@ -2,6 +2,7 @@ package top.qingqiuya.xflow;
 
 import android.content.Context;
 import android.content.Intent;
+import android.util.Log;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -29,6 +30,7 @@ public class ApiServer {
     public static final int DEFAULT_PORT = 8080;
 
     private final Context ctx;
+    private volatile String token = "";
     private ServerSocket server;
     private Thread loop;
     private volatile boolean running;
@@ -41,12 +43,23 @@ public class ApiServer {
         return running;
     }
 
+    /** 设置访问令牌；空字符串表示不校验（只用在纯回环调试） */
+    public void setToken(String t) {
+        token = t == null ? "" : t.trim();
+    }
+
+    public String getToken() {
+        return token;
+    }
+
     public synchronized void start(int port) {
         if (running) return;
         try {
             server = new ServerSocket();
             server.setReuseAddress(true);
-            server.bind(new InetSocketAddress(port));
+            // 绑 :: 而不是 0.0.0.0：Linux/Android 默认 dual-stack，
+            // 一个 socket 同时收 IPv4 和 IPv6，省得开两个
+            server.bind(new InetSocketAddress(java.net.InetAddress.getByName("::"), port));
         } catch (Exception e) {
             return;
         }
@@ -90,14 +103,17 @@ public class ApiServer {
 
             // 读完 header，拿 Content-Length
             int len = 0;
+            Map<String, String> headers = new HashMap<>();
             String line;
             while ((line = in.readLine()) != null && !line.isEmpty()) {
                 int i = line.indexOf(':');
                 if (i > 0) {
                     String k = line.substring(0, i).trim().toLowerCase();
+                    String v = line.substring(i + 1).trim();
+                    headers.put(k, v);
                     if (k.equals("content-length")) {
                         try {
-                            len = Integer.parseInt(line.substring(i + 1).trim());
+                            len = Integer.parseInt(v);
                         } catch (Exception ignored) {
                         }
                     }
@@ -132,18 +148,35 @@ public class ApiServer {
             // POST body 里的 JSON 字段也塞进 q（简单扁平 JSON）
             if (!body.isEmpty()) parseFlatJSON(body, q);
 
+            // 令牌校验：header 或 ?token= 都行（浏览器直接打开方便）
+            if (!token.isEmpty()) {
+                String got = headers.getOrDefault("x-api-token", "");
+                if (got.isEmpty()) got = q.getOrDefault("token", "");
+                if (!token.equals(got)) {
+                    Log.w("xflow-api", "拒绝未授权请求 " + path + " from " + sock.getInetAddress());
+                    writeResponse(sock, 401,
+                            "{\"ok\":false,\"err\":\"需要 X-API-Token\"}");
+                    return;
+                }
+            }
+
             String out = route(method, path, q);
-            byte[] b = out.getBytes(StandardCharsets.UTF_8);
-            OutputStream os = sock.getOutputStream();
-            os.write(("HTTP/1.1 200 OK\r\n" +
-                    "Content-Type: application/json; charset=utf-8\r\n" +
-                    "Content-Length: " + b.length + "\r\n" +
-                    "Access-Control-Allow-Origin: *\r\n" +
-                    "Connection: close\r\n\r\n").getBytes(StandardCharsets.UTF_8));
-            os.write(b);
-            os.flush();
+            writeResponse(sock, 200, out);
         } catch (Exception ignored) {
         }
+    }
+
+    private void writeResponse(Socket sock, int code, String body) throws Exception {
+        byte[] b = body.getBytes(StandardCharsets.UTF_8);
+        OutputStream os = sock.getOutputStream();
+        String status = code == 200 ? "200 OK" : (code == 401 ? "401 Unauthorized" : code + " Error");
+        os.write(("HTTP/1.1 " + status + "\r\n" +
+                "Content-Type: application/json; charset=utf-8\r\n" +
+                "Content-Length: " + b.length + "\r\n" +
+                "Access-Control-Allow-Origin: *\r\n" +
+                "Connection: close\r\n\r\n").getBytes(StandardCharsets.UTF_8));
+        os.write(b);
+        os.flush();
     }
 
     private String route(String method, String path, Map<String, String> q) {

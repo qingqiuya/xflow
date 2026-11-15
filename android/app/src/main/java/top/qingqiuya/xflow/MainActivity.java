@@ -56,6 +56,18 @@ public class MainActivity extends Activity {
         final android.content.SharedPreferences prefs =
                 getSharedPreferences("xflow", MODE_PRIVATE);
         api = new ApiServer(this);
+        // 令牌：第一次生成后存起来，重启不变；电脑那边存一次就能一直用
+        String tok = prefs.getString("api_token", "");
+        if (tok.isEmpty()) {
+            StringBuilder sb = new StringBuilder();
+            java.util.Random r = new java.util.Random();
+            for (int i = 0; i < 24; i++) {
+                sb.append("0123456789abcdef".charAt(r.nextInt(16)));
+            }
+            tok = sb.toString();
+            prefs.edit().putString("api_token", tok).apply();
+        }
+        api.setToken(tok);
         beacon = new Beacon(this);
         try {
             beacon.setSelfName(android.os.Build.MODEL == null ? "android" : android.os.Build.MODEL);
@@ -253,9 +265,11 @@ public class MainActivity extends Activity {
     /** API 用法说明：自己搭布局，跟 App 的深色风格对齐（系统弹窗是灰底） */
     private void showApiDoc() {
         String ip = localIP();
+        String ip6 = localIP6();
         int port = ApiServer.DEFAULT_PORT;
         boolean on = api != null && api.isRunning();
         String base = "http://" + ip + ":" + port;
+        String tok = api != null ? api.getToken() : "";
 
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
@@ -276,9 +290,9 @@ public class MainActivity extends Activity {
         state.setPadding(0, dp(4), 0, dp(12));
         box.addView(state);
 
-        // 地址一行，可点复制
+        // 地址一行，可点复制（有 IPv6 就一起显示）
         TextView addr = new TextView(this);
-        addr.setText(base);
+        addr.setText(ip6.isEmpty() ? base : base + "\n[" + ip6 + "]:" + port);
         addr.setTextColor(0xFF5CC9FF);
         addr.setTextSize(13.5f);
         addr.setTypeface(android.graphics.Typeface.MONOSPACE);
@@ -288,7 +302,7 @@ public class MainActivity extends Activity {
             android.content.ClipboardManager cm =
                     (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
             cm.setPrimaryClip(android.content.ClipData.newPlainText("XFlow", base));
-            Toast.makeText(this, "已复制", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "已复制地址", Toast.LENGTH_SHORT).show();
         });
         box.addView(addr, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
@@ -300,14 +314,17 @@ public class MainActivity extends Activity {
         body.setTextIsSelectable(true);
         body.setPadding(0, dp(14), 0, dp(6));
         body.setText(
+                "令牌（每个请求都要带）\n  " + tok + "\n\n" +
                 "GET  /api/version\n" +
                 "GET  /api/jobs\n" +
                 "POST /api/add?url=<链接>&name=<名字>\n" +
                 "POST /api/clear\n" +
                 "POST /api/job/<id>?action=pause|resume|delete\n\n" +
-                "curl " + base + "/api/jobs\n" +
-                "curl -X POST \"" + base + "/api/add?url=...\"\n\n" +
-                "只在局域网可用，别把这个端口映射到公网。");
+                "curl -H \"X-API-Token: " + tok + "\" " + base + "/api/jobs\n" +
+                "curl -X POST -H \"X-API-Token: " + tok + "\" \\\n" +
+                "     \"" + base + "/api/add?url=...\"\n\n" +
+                "也可以把令牌放进 URL：?token=" + tok.substring(0, 6) + "...\n" +
+                "局域网内其余设备没有令牌就调不动。");
         android.widget.ScrollView sv = new android.widget.ScrollView(this);
         sv.addView(body);
         LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(
@@ -345,6 +362,30 @@ public class MainActivity extends Activity {
         chip.setText(on ? "API 开" : "API");
         chip.setTextColor(on ? 0xFF3DDC84 : 0xFF5B6478);
         chip.setBackgroundResource(R.drawable.chip_bg);
+    }
+
+    /** 取本机第一个全局 IPv6（240e/2408 这类公网段，排除 fe80 链路本地） */
+    private String localIP6() {
+        try {
+            java.util.Enumeration<java.net.NetworkInterface> en =
+                    java.net.NetworkInterface.getNetworkInterfaces();
+            while (en.hasMoreElements()) {
+                java.net.NetworkInterface ni = en.nextElement();
+                if (ni.isLoopback() || !ni.isUp()) continue;
+                java.util.Enumeration<java.net.InetAddress> addrs = ni.getInetAddresses();
+                while (addrs.hasMoreElements()) {
+                    java.net.InetAddress a = addrs.nextElement();
+                    if (a instanceof java.net.Inet6Address && !a.isLoopbackAddress()) {
+                        String h = a.getHostAddress();
+                        if (h.startsWith("fe80")) continue;   // 链路本地没用
+                        int p = h.indexOf('%');
+                        return p > 0 ? h.substring(0, p) : h;
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return "";
     }
 
     private String localIP() {
