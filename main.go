@@ -214,6 +214,13 @@ func main() {
 		json.NewEncoder(w).Encode(map[string]any{"ok": true, "id": j.ID, "name": info.AssetName, "version": info.Latest})
 	})
 
+	// 界面背景图（嵌在 exe 里）
+	mux.HandleFunc("/bg.jpg", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/jpeg")
+		w.Header().Set("Cache-Control", "max-age=86400")
+		w.Write(bgJPG)
+	})
+
 	mux.HandleFunc("/api/version", func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{"version": Version})
 	})
