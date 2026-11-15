@@ -81,11 +81,12 @@ func randomToken() string {
 // listenAddr 返回实际绑定的地址。
 func listenAddr(port int) string {
 	s := loadSettings()
-	host := "127.0.0.1"
 	if s.Listen == "lan" {
-		host = "0.0.0.0"
+		// 绑 :: 而不是 0.0.0.0：Linux/Windows 默认 dual-stack，
+		// 一个 socket 同时收 IPv4 和 IPv6。手机端那边也是这么干的。
+		return net.JoinHostPort("::", itoa(port))
 	}
-	return net.JoinHostPort(host, itoa(port))
+	return net.JoinHostPort("127.0.0.1", itoa(port))
 }
 
 func itoa(n int) string {
@@ -118,6 +119,16 @@ func lanIP() string {
 	return ""
 }
 
+// isLoopbackReq 判断请求是否来自本机回环
+func isLoopbackReq(r *http.Request) bool {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
 // authOK 检查 token。token 为空时不校验（本机模式）。
 //
 // 规则刻意分开：
@@ -131,7 +142,11 @@ func authOK(r *http.Request, needToken bool) bool {
 	if s.Token == "" {
 		return true
 	}
-	got := r.Header.Get("X-Token")
+	// X-API-Token 跟手机端一致；X-Token 是这版之前的老名字，留着兼容
+	got := r.Header.Get("X-API-Token")
+	if got == "" {
+		got = r.Header.Get("X-Token")
+	}
 	if got == "" {
 		got = r.URL.Query().Get("token")
 	}
@@ -144,14 +159,18 @@ func authOK(r *http.Request, needToken bool) bool {
 	return got == s.Token
 }
 
-// guardMux 包一层：局域网模式下，「写」接口要 token。读接口和页面放行。
+// guardMux 包一层：局域网模式下，来自别的机器的请求一律要 token；
+// 本机回环放行（不然自己开浏览器看界面还得拼令牌）。
+//
+// 之前只校验「写」接口，读接口（/api/jobs）局域网内谁都能拉，等于把
+// 下载任务列表暴露给同一 WiFi 的所有人 —— 跟手机端 X-API-Token 全校验
+// 的行为也对不上，现在统一。
 func guardMux(mux *http.ServeMux, needToken bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		write := r.Method == "POST" || r.Method == "PUT" || r.Method == "DELETE" || r.Method == "PATCH"
-		if write && !authOK(r, needToken) {
+		if needToken && !isLoopbackReq(r) && !authOK(r, true) {
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
 			w.WriteHeader(401)
-			json.NewEncoder(w).Encode(map[string]any{"ok": false, "err": "需要 token（请求头 X-Token）"})
+			json.NewEncoder(w).Encode(map[string]any{"ok": false, "err": "需要 token（请求头 X-API-Token，老名字 X-Token 也认）"})
 			return
 		}
 		mux.ServeHTTP(w, r)
