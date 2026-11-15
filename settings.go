@@ -235,16 +235,27 @@ func restartListener() error {
 		return nil
 	}
 	addr := listenAddr(currentPort)
+	old := apiLn
+	// 必须先关旧的：「::」或「0.0.0.0」会把整个端口占住，
+	// 想换绑到 127.0.0.1 时先 Listen 会直接 bind 失败（2026-11-16 踩到）。
+	oldAddr := ""
+	if old != nil {
+		oldAddr = old.Addr().String()
+		old.Close()
+	}
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
+		// 回滚：旧地址再听一次，别把服务弄没
+		if oldAddr != "" {
+			if ln2, e2 := net.Listen("tcp", oldAddr); e2 == nil {
+				apiLn = ln2
+				go http.Serve(ln2, withCORS(guardMux(apiMux, loadSettings().Listen == "lan")))
+			}
+		}
 		return err
 	}
-	old := apiLn
 	apiLn = ln
 	needTok := loadSettings().Listen == "lan"
 	go http.Serve(ln, withCORS(guardMux(apiMux, needTok)))
-	if old != nil {
-		old.Close()
-	}
 	return nil
 }
