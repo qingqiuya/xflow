@@ -159,3 +159,14 @@ func startTray() {
 		}, func() {})
 	}()
 }
+
+// processAlive 判断 pid 还在不在（Windows 上用 OpenProcess 探活）。
+func processAlive(pid int) bool {
+	const processQueryLimitedInformation = 0x1000
+	h, err := syscall.OpenProcess(processQueryLimitedInformation, false, uint32(pid))
+	if err != nil {
+		return false
+	}
+	syscall.CloseHandle(h)
+	return true
+}

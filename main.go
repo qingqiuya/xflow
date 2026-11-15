@@ -39,14 +39,74 @@ func showTrayWindow() {
 		return
 	}
 	go func() {
-		for i := 0; i < 40; i++ {
+		for i := 0; i < 20; i++ {
 			if findWin() != 0 {
 				showWin()
 				return
 			}
 			time.Sleep(150 * time.Millisecond)
 		}
+		// 窗口没了（被销毁 / 从没建成功）—— 直接拉一个窗口客户端出来
+		spawnWindowClient()
 	}()
+}
+
+// windowPidPath 记录窗口客户端的 pid，防止连点任务弹一堆窗口。
+func windowPidPath() string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".localdl-window.pid")
+}
+
+// spawnWindowClient 起一个 --window-only 子进程把界面弹出来。
+func spawnWindowClient() {
+	pf := windowPidPath()
+	if b, err := os.ReadFile(pf); err == nil {
+		var pid int
+		fmt.Sscanf(strings.TrimSpace(string(b)), "%d", &pid)
+		if pid > 0 && processAlive(pid) {
+			return // 已经有一个窗口进程
+		}
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return
+	}
+	cmd := exec.Command(exe, "--window-only")
+	cmd.Env = os.Environ()
+	if err := cmd.Start(); err != nil {
+		logTray("spawnWindowClient 失败: " + err.Error())
+		return
+	}
+	os.WriteFile(pf, []byte(strconv.Itoa(cmd.Process.Pid)), 0644)
+	logTray(fmt.Sprintf("spawnWindowClient: pid=%d", cmd.Process.Pid))
+	go cmd.Wait()
+}
+
+// runWindowClient 只建窗口连本地服务，窗口关掉就退出（服务不受影响）。
+func runWindowClient() {
+	port := 17777
+	home, _ := os.UserHomeDir()
+	if b, err := os.ReadFile(filepath.Join(home, ".localdl-port")); err == nil {
+		if p, _ := strconv.Atoi(strings.TrimSpace(string(b))); p > 0 {
+			port = p
+		}
+	}
+	w := webview2.NewWithOptions(webview2.WebViewOptions{
+		AutoFocus: true,
+		DataPath:  filepath.Join(home, ".localdl-webview"),
+		WindowOptions: webview2.WindowOptions{
+			Title:   "XFlow",
+			Width:   1000,
+			Height:  700,
+			Default: true,
+		},
+	})
+	if w == nil {
+		return
+	}
+	w.Navigate("http://127.0.0.1:" + strconv.Itoa(port) + "/")
+	w.Run()
+	os.Remove(windowPidPath())
 }
 
 func main() {
@@ -63,6 +123,16 @@ func main() {
 
 	// Windows：BT 存储切回非 mmap 模式（见 envboot_windows.go），第一次会 re-exec 一次
 	ensureClassicFileIO()
+
+	// --window-only：只建界面窗口连已经在跑的服务（内部用，服务会 spawn 它）。
+	// 必须有这个：--tray 建的那个隐藏窗口在某些情况下会没掉（2026-11-15 重启后
+	// 实测 FindWindow 找不到、进程 MainWindowHandle=0），光靠 showWin 弹不出来。
+	for _, a := range os.Args[1:] {
+		if a == "--window-only" {
+			runWindowClient()
+			return
+		}
+	}
 
 	// 单实例：只允许一个进程。
 	// 以前 alreadyRunning() 写好了却从来没人调用——表面上"只起一个"其实是
