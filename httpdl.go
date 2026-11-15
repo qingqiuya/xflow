@@ -57,9 +57,26 @@ func clientUA() string {
 
 // userAgentFor：SourceForge 的下载域名明确拦截 Mozilla 前缀的 UA（2026-11-11 实测：
 // 同一个链接 Mozilla/5.0 → 403，XFlow/1.6.2 或 curl → 301 → 200）。
+// 国内镜像站（清华/中科大/阿里云/华为云等）会拦「声称自己是浏览器」的请求，
+// 直接 403 —— 实测同一个 Range 请求：无 UA 或 XFlow UA 返回 206，浏览器 UA 返回 403。
+// 所以这些域名也用 clientUA()，别用 browserUA。
+var mirrorHosts = []string{
+	"tuna.tsinghua.edu.cn", "mirrors.tuna.tsinghua.edu.cn",
+	"ustc.edu.cn", "aliyun.com", "huaweicloud.com",
+	"mirrors.bfsu.edu.cn", "mirrors.nju.edu.cn", "mirror.sjtu.edu.cn",
+	"tencent.com", "doubanio.com",
+}
+
 func userAgentFor(rawurl string) string {
-	if strings.Contains(strings.ToLower(rawurl), "sourceforge.net") {
+	low := strings.ToLower(rawurl)
+	// SourceForge 拦的是「Mozilla 前缀」，用 clientUA
+	if strings.Contains(low, "sourceforge.net") {
 		return clientUA()
+	}
+	for _, h := range mirrorHosts {
+		if strings.Contains(low, h) {
+			return clientUA()
+		}
 	}
 	return browserUA
 }
