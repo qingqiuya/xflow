@@ -191,9 +191,16 @@ func registerSettingsAPI(mux *http.ServeMux) {
 				json.NewEncoder(w).Encode(map[string]any{"ok": false, "err": err.Error()})
 				return
 			}
+			// 监听范围改了就地重绑（不用重启进程）；token 本来每次请求都读最新。
+			reloadErr := ""
+			if r.URL.Query().Get("nolisten") == "" {
+				if err := restartListener(); err != nil {
+					reloadErr = "监听地址切换失败（" + err.Error() + "），重启汐流后再试"
+				}
+			}
 			json.NewEncoder(w).Encode(map[string]any{
-				"ok": true, "settings": s, "needRestart": true,
-				"lanIP": lanIP(), "port": currentPort,
+				"ok": true, "settings": s, "needRestart": false,
+				"reloadErr": reloadErr, "lanIP": lanIP(), "port": currentPort,
 			})
 			return
 		}
@@ -206,3 +213,38 @@ func registerSettingsAPI(mux *http.ServeMux) {
 
 // currentPort 记录实际监听端口（随机回退时也能告诉前端）。
 var currentPort = 17777
+
+// 运行时切换监听地址：改「仅本机 / 局域网」不用重启进程。
+// 先把新地址听上，成功了再关旧的 —— 失败就保留原样，不至于把服务弄没。
+var (
+	apiLn  net.Listener
+	apiMux *http.ServeMux
+	apiMu  sync.Mutex
+)
+
+func setAPIListener(ln net.Listener, mux *http.ServeMux) {
+	apiMu.Lock()
+	apiLn, apiMux = ln, mux
+	apiMu.Unlock()
+}
+
+func restartListener() error {
+	apiMu.Lock()
+	defer apiMu.Unlock()
+	if apiMux == nil {
+		return nil
+	}
+	addr := listenAddr(currentPort)
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return err
+	}
+	old := apiLn
+	apiLn = ln
+	needTok := loadSettings().Listen == "lan"
+	go http.Serve(ln, withCORS(guardMux(apiMux, needTok)))
+	if old != nil {
+		old.Close()
+	}
+	return nil
+}

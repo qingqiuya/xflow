@@ -382,6 +382,7 @@ func main() {
 	}()
 
 	needTok := loadSettings().Listen == "lan"
+	setAPIListener(ln, mux)
 	go func() {
 		if err := http.Serve(ln, withCORS(guardMux(mux, needTok))); err != nil {
 			fmt.Fprintln(os.Stderr, err)

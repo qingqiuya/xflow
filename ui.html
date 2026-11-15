@@ -300,7 +300,7 @@ $('#settingsBtn').onclick = openSettings;
 $('#setCancel').onclick = ()=>{ $('#setMask').style.display='none' };
 $('#setRot').onclick = async ()=>{
   const r = await (await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rotate:true})})).json();
-  if(r.ok && r.settings){ $('#setTok').value = r.settings.token || ''; $('#setTok').dataset.real = r.settings.token || ''; alert('令牌已重新生成，重启汐流后生效') }
+  if(r.ok && r.settings){ $('#setTok').value = r.settings.token || ''; $('#setTok').dataset.real = r.settings.token || ''; alert('令牌已重新生成，立即生效') }
 };
 $('#setOk').onclick = async ()=>{
   const listen = [...document.querySelectorAll('input[name=lst]')].find(x=>x.checked)?.value || 'local';

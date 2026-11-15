@@ -516,6 +516,7 @@ func main() {
 	// 把端口写到文件，方便外部（另一台机器/脚本/插件安装说明）调用 API
 	os.WriteFile(filepath.Join(home, ".localdl-port"), []byte(strconv.Itoa(port)), 0644)
 	needTok := loadSettings().Listen == "lan"
+	setAPIListener(ln, mux)
 	go http.Serve(ln, withCORS(guardMux(mux, needTok)))
 
 	// --headless：只跑 HTTP 服务和下载引擎，不建窗口、不起托盘。
