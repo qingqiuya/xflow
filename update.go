@@ -6,6 +6,8 @@ package main
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"runtime"
 	"net/http"
 	"strconv"
@@ -25,6 +27,8 @@ type updateInfo struct {
 	Asset     string `json:"asset,omitempty"`     // 本平台安装包直链
 	AssetName string `json:"assetName,omitempty"` // 安装包文件名
 	Size      int64  `json:"size,omitempty"`
+	Portable  bool   `json:"portable,omitempty"` // 调试用：当前是否判成绿色版
+	ExePath   string `json:"exe,omitempty"`      // 调试用：os.Executable() 的结果
 	Err       string `json:"err,omitempty"`
 	Checked   int64  `json:"checked"`
 }
@@ -46,6 +50,10 @@ func checkUpdate() updateInfo {
 	updateMu.Unlock()
 
 	info := updateInfo{Current: Version, Checked: time.Now().Unix()}
+	if exe, err := os.Executable(); err == nil {
+		info.ExePath = exe
+	}
+	info.Portable = isPortable()
 	c := &http.Client{Timeout: 8 * time.Second}
 	req, _ := http.NewRequest("GET", updateReleaseURL, nil)
 	req.Header.Set("User-Agent", "XFlow/"+Version)
@@ -81,12 +89,17 @@ func checkUpdate() updateInfo {
 		if info.URL == "" {
 			info.URL = updatePageURL
 		}
-		// 按平台挑安装包
+		// 按平台 + 安装方式挑资产：
+		// 装过安装包的（exe 在 %LOCALAPPDATA%\XFlow）→ Setup.exe；
+		// 绿色版（exe 放别处）→ Portable.exe，省得给它塞个安装器。
+		portable := isPortable()
 		for _, a := range rel.Assets {
 			name := strings.ToLower(a.Name)
 			switch runtime.GOOS {
 			case "windows":
-				if strings.HasSuffix(name, "setup.exe") {
+				if portable && strings.Contains(name, "portable") {
+					info.Asset, info.AssetName, info.Size = a.BrowserDownloadURL, a.Name, a.Size
+				} else if !portable && strings.Contains(name, "setup") {
 					info.Asset, info.AssetName, info.Size = a.BrowserDownloadURL, a.Name, a.Size
 				}
 			case "linux":
@@ -96,6 +109,15 @@ func checkUpdate() updateInfo {
 			}
 			if info.Asset != "" {
 				break
+			}
+		}
+		// 兜底：没找到对应类型就用任意一个 Windows 资产
+		if info.Asset == "" && runtime.GOOS == "windows" {
+			for _, a := range rel.Assets {
+				if strings.HasSuffix(strings.ToLower(a.Name), ".exe") {
+					info.Asset, info.AssetName, info.Size = a.BrowserDownloadURL, a.Name, a.Size
+					break
+				}
 			}
 		}
 	}
@@ -154,4 +176,18 @@ func splitVer(v string) []int {
 func writeJSONErr(w http.ResponseWriter, msg string) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	json.NewEncoder(w).Encode(map[string]any{"ok": false, "err": msg})
+}
+
+// isPortable 判断当前是不是绿色版：exe 不在安装目录（%LOCALAPPDATA%\XFlow）里就是。
+func isPortable() bool {
+	exe, err := os.Executable()
+	if err != nil {
+		return false
+	}
+	local := os.Getenv("LOCALAPPDATA")
+	if local == "" {
+		return true
+	}
+	installed := strings.ToLower(filepath.Join(local, "XFlow")) + string(os.PathSeparator)
+	return !strings.HasPrefix(strings.ToLower(exe), installed)
 }
