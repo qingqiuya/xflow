@@ -403,6 +403,7 @@ func main() {
 		switch a {
 		case "--tray", "-tray", "--hidden":
 			startHidden = true
+			trayMode = true // ★ 少了这句：--tray 启动时不会弹窗（2026-11-15 踩到）
 		case "--headless", "-headless":
 			headless = true
 		}
