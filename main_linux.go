@@ -11,6 +11,7 @@ package main
 //   xflow                  起服务并开窗口
 //   xflow --headless       只跑服务（服务器上、或者没图形界面时）
 //   xflow --browser        服务起来后交给系统浏览器（不想要原生窗口时）
+//   xflow --window-only    只开界面窗口，连已经在跑的服务（服务端自己会拉它）
 //   xflow --port 8899      换端口
 //   xflow --dir /data/dl   换默认下载目录（写进配置）
 //
@@ -42,18 +43,37 @@ var uiFS embed.FS
 
 var mgr *Manager
 
+// headlessMode / servePort / stateDir 给 ensureWindow 用：
+// 服务无界面跑着，有人加任务时才把窗口拉起来。
+var (
+	headlessMode bool
+	servePort    int
+	stateDirPath string
+)
+
 func main() {
 	port := flag.Int("port", 17777, "监听端口（只绑 127.0.0.1）")
 	dir := flag.String("dir", "", "默认下载目录")
 	headless := flag.Bool("headless", false, "只跑服务，不开界面")
 	browser := flag.Bool("browser", false, "用系统浏览器打开，不开原生窗口")
+	windowOnly := flag.Bool("window-only", false, "只开窗口，连已经在跑的服务（内部用）")
 	flag.Parse()
+
+	// --window-only：不碰 Manager、不监听端口，只把界面连到已有服务上。
+	// headless 服务在收到新任务时会 exec 自己这个模式来"弹窗"。
+	if *windowOnly {
+		runWindowClient(*port)
+		return
+	}
 
 	stateDir := os.Getenv("XFLOW_STATE")
 	if stateDir == "" {
 		stateDir = filepath.Join(mustHome(), ".local", "state", "xflow")
 	}
 	os.MkdirAll(stateDir, 0755)
+	stateDirPath = stateDir
+	servePort = *port
+	headlessMode = *headless || *browser
 
 	if *dir != "" {
 		os.MkdirAll(*dir, 0755)
@@ -103,6 +123,7 @@ func main() {
 			}
 			if isBTSource(src) {
 				j := mgr.AddBT(src, orDefault(d.Name, "BT 任务"), target)
+				ensureWindow()
 				json.NewEncoder(w).Encode(map[string]any{"ok": true, "id": j.ID})
 				return
 			}
@@ -111,6 +132,7 @@ func main() {
 				json.NewEncoder(w).Encode(map[string]any{"ok": false, "err": err.Error()})
 				return
 			}
+			ensureWindow()
 			json.NewEncoder(w).Encode(map[string]any{"ok": true, "id": j.ID})
 			return
 		}
@@ -151,6 +173,7 @@ func main() {
 		}
 		if isBTSource(src) {
 			j := mgr.AddBT(src, orDefault(name, "BT 任务"), dir)
+			ensureWindow()
 			json.NewEncoder(w).Encode(map[string]any{"ok": true, "id": j.ID})
 			return
 		}
@@ -166,6 +189,7 @@ func main() {
 			json.NewEncoder(w).Encode(map[string]any{"ok": false, "err": err.Error()})
 			return
 		}
+		ensureWindow()
 		json.NewEncoder(w).Encode(map[string]any{"ok": true, "id": j.ID, "name": name})
 	})
 
@@ -300,6 +324,7 @@ func main() {
 			target = currentDir()
 		}
 		j := mgr.AddBT(tmp.Name(), name, target)
+		ensureWindow()
 		json.NewEncoder(w).Encode(map[string]any{"ok": true, "id": j.ID, "name": name})
 	})
 
@@ -368,4 +393,56 @@ func isBTSource(src string) bool {
 	}
 	low := strings.ToLower(src)
 	return strings.HasSuffix(low, ".torrent")
+}
+
+// windowPidFile 记录界面窗口客户端的 pid，用来避免重复弹窗。
+func windowPidFile() string {
+	if stateDirPath == "" {
+		home, _ := os.UserHomeDir()
+		return filepath.Join(home, ".local", "state", "xflow", "window.pid")
+	}
+	return filepath.Join(stateDirPath, "window.pid")
+}
+
+// runWindowClient 只开窗口连已有服务；窗口关掉就退出，服务不受影响。
+func runWindowClient(port int) {
+	url := "http://127.0.0.1:" + strconv.Itoa(port) + "/"
+	w := webview.New(false)
+	defer w.Destroy()
+	w.SetTitle("汐流 XFlow")
+	w.SetSize(1040, 720, webview.HintNone)
+	w.Navigate(url)
+	w.Run()
+	os.Remove(windowPidFile())
+}
+
+// ensureWindow 在有界面能力的机器上，收到第一个新任务时把窗口拉起来。
+// 已经在开着的就什么都不做（靠 window.pid + kill -0 判断）。
+func ensureWindow() {
+	if !headlessMode {
+		return // 本来就是窗口模式
+	}
+	if os.Getenv("DISPLAY") == "" && os.Getenv("WAYLAND_DISPLAY") == "" {
+		return // 真没图形环境
+	}
+	pidFile := windowPidFile()
+	if b, err := os.ReadFile(pidFile); err == nil {
+		if pid, _ := strconv.Atoi(strings.TrimSpace(string(b))); pid > 0 {
+			if syscall.Kill(pid, 0) == nil {
+				return // 窗口已经在
+			}
+		}
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return
+	}
+	cmd := exec.Command(exe, "--window-only", "--port", strconv.Itoa(servePort))
+	cmd.Env = os.Environ()
+	if err := cmd.Start(); err != nil {
+		fmt.Fprintf(os.Stderr, "拉起窗口失败：%v\n", err)
+		return
+	}
+	os.WriteFile(pidFile, []byte(strconv.Itoa(cmd.Process.Pid)), 0644)
+	go cmd.Wait()
 }
