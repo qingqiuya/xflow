@@ -27,7 +27,9 @@ import java.util.Map;
  */
 public class ApiServer {
 
-    public static final int DEFAULT_PORT = 8080;
+    // 高位端口：8080/8081/8000 这些运营商和公共 WiFi 都爱封，
+    // 28460 避开家里已用的 28443/28444，也在常见扫描器的兴趣范围外
+    public static final int DEFAULT_PORT = 28460;
 
     private final Context ctx;
     private volatile String token = "";
