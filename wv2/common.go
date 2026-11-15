@@ -68,6 +68,10 @@ type WebView interface {
 	// thread.
 	SetTitle(title string)
 
+	// SetVisible syncs the underlying browser's visibility flag. Must be called
+	// from the UI thread (or via Dispatch).
+	SetVisible(v bool)
+
 	// SetPosition updates native window size and position.
 	SetPosition(wp WindowPosition)
 

@@ -48,6 +48,16 @@ type Chromium struct {
 	AcceleratorKeyCallback       func(uint) bool
 }
 
+// SetVisible 设置 WebView2 controller 的可见性。
+// 必须跟窗口的显示/隐藏同步：只 SW_HIDE 窗口而 controller 仍认为 visible=true 时，
+// 再 SW_SHOW 回来经常白屏/花屏（渲染器已挂起但没被通知恢复）。2026-11-15 踩到。
+func (e *Chromium) SetVisible(v bool) error {
+	if e == nil || e.controller == nil {
+		return nil
+	}
+	return e.controller.PutIsVisible(v)
+}
+
 func NewChromium() *Chromium {
 	e := &Chromium{}
 	/*

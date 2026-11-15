@@ -32,6 +32,14 @@ var mgr *Manager
 // 下载时才弹出来」，和 Linux 版 1.6.10 的行为对齐。
 var trayMode bool
 
+// mainView / servePort：showTrayWindow 需要在窗口重新显示后把页面重新载入一次。
+// WebView2 被 SW_HIDE 之后，渲染器会挂起；再 SW_SHOW 回来经常是白屏或花屏
+// （2026-11-15 清秋截图那团彩色条纹就是这个）。重载是最省事可靠的修法。
+var (
+	mainView  webview2.WebView
+	servePort int
+)
+
 // showTrayWindow 给 HTTP handler 用：把隐藏的主窗口叫出来（找不到就重试几次，
 // 因为窗口是主线程异步建的，可能比第一次请求晚）。
 func showTrayWindow() {
@@ -41,7 +49,8 @@ func showTrayWindow() {
 	go func() {
 		for i := 0; i < 20; i++ {
 			if findWin() != 0 {
-				showWin()
+				showMainWindow()
+				reloadView()
 				return
 			}
 			time.Sleep(150 * time.Millisecond)
@@ -124,6 +133,13 @@ func main() {
 	// Windows：BT 存储切回非 mmap 模式（见 envboot_windows.go），第一次会 re-exec 一次
 	ensureClassicFileIO()
 
+	// WebView2 在 SW_HIDE 再 SW_SHOW 之后经常白屏或花屏（隐藏时 GPU 渲染器把上下文丢了，
+	// 恢复时又没重画）。2026-11-15 清秋截图里那团彩色条纹就是这个。
+	// 禁掉 GPU 走软件渲染 —— 这 UI 很轻，感知不出差别，但显示/隐藏来回折腾不会坏。
+	if os.Getenv("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS") == "" {
+		os.Setenv("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "--disable-gpu --disable-gpu-compositing")
+	}
+
 	// --window-only：只建界面窗口连已经在跑的服务（内部用，服务会 spawn 它）。
 	// 必须有这个：--tray 建的那个隐藏窗口在某些情况下会没掉（2026-11-15 重启后
 	// 实测 FindWindow 找不到、进程 MainWindowHandle=0），光靠 showWin 弹不出来。
@@ -146,7 +162,7 @@ func main() {
 		// 就把第一个实例藏着的窗口叫出来了。
 		if u, n := parseLaunchURL(os.Args[1:]); u != "" {
 			forwardToRunning(u, n)
-			showWin()
+			showMainWindow()
 		}
 		return
 	}
@@ -463,6 +479,7 @@ func main() {
 		}
 	}
 	port := ln.Addr().(*net.TCPAddr).Port
+	servePort = port
 	// 把端口写到文件，方便外部（另一台机器/脚本/插件安装说明）调用 API
 	os.WriteFile(filepath.Join(home, ".localdl-port"), []byte(strconv.Itoa(port)), 0644)
 	go http.Serve(ln, withCORS(mux))
@@ -512,10 +529,13 @@ func main() {
 			Hidden:  startHidden, // 自启模式：创建就不显示，不闪
 		},
 		OnClose: func(w webview2.WebView) {
-			// 点 × 不退出，缩到托盘
-			hideWin()
+			// 点 × 不退出，缩到托盘（同时把 WebView2 标记为不可见，免得再显示时白屏）
+			hideMainWindowForClose()
 		},
 	})
+	if w != nil {
+		mainView = w
+	}
 	if w == nil {
 		// 回退：用浏览器
 		exec.Command("rundll32", "url.dll,FileProtocolHandler", "http://127.0.0.1:"+strconv.Itoa(port)).Start()
@@ -577,4 +597,31 @@ func forwardToRunning(rawurl, name string) bool {
 	}
 	defer resp.Body.Close()
 	return resp.StatusCode == 200
+}
+
+// showMainWindow / hideMainWindow：窗口显隐的同时同步 WebView2 的 IsVisible，
+// 不然再显示回来就是白屏/花屏。
+func showMainWindow() {
+	showWin()
+	if mainView != nil {
+		mainView.Dispatch(func() { mainView.SetVisible(true) })
+	}
+}
+
+func hideMainWindow() {
+	if mainView != nil {
+		mainView.Dispatch(func() { mainView.SetVisible(false) })
+	}
+	hideWin()
+}
+
+// reloadView 让界面重新载入一次（隐藏后再显示时 WebView2 常白屏，重载最稳）。
+func reloadView() {
+	if mainView == nil || servePort == 0 {
+		return
+	}
+	url := "http://127.0.0.1:" + strconv.Itoa(servePort) + "/"
+	mainView.Dispatch(func() {
+		mainView.Navigate(url)
+	})
 }

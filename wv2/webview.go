@@ -461,6 +461,13 @@ func (w *webview) Window() unsafe.Pointer {
 	return unsafe.Pointer(w.hwnd)
 }
 
+// SetVisible 同步 WebView2 的可见性（配合窗口 SW_SHOW/SW_HIDE 用）。
+func (w *webview) SetVisible(v bool) {
+	if c, ok := w.browser.(*edge.Chromium); ok {
+		c.SetVisible(v)
+	}
+}
+
 func (w *webview) Navigate(url string) {
 	w.browser.Navigate(url)
 }

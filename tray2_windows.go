@@ -97,6 +97,14 @@ func hideWin() {
 	hideAllOwnWindows()
 }
 
+// hideMainWindowForClose 窗口 OnClose 时用（同步 WebView2 可见性再隐藏）。
+func hideMainWindowForClose() {
+	if mainView != nil {
+		mainView.SetVisible(false)
+	}
+	hideWin()
+}
+
 func hideAllOwnWindows() int {
 	pid := uint32(0)
 	p, _, _ := procGetCurrentProcessId2.Call()
@@ -152,7 +160,7 @@ func startTray() {
 				for {
 					select {
 					case <-mShow.ClickedCh:
-						showWin()
+						showMainWindow()
 					case <-mQuit.ClickedCh:
 						systray.Quit()
 						os.Exit(0)
