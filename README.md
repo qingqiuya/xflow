@@ -1,3 +1,5 @@
+> HTTP 接口文档见 [docs/API.md](docs/API.md)
+
 # 汐流 XFlow
 
 <img src="assets/icon.png" width="140" align="right" alt="汐流">
