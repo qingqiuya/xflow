@@ -9,4 +9,13 @@
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:colorAccent">#4CC2FF</item>
     </style>
+
+    <!-- 跟 App 一个色系的弹窗：系统默认是 Material 灰底，跟深蓝背景不搭 -->
+    <style name="DarkDialog" parent="@android:style/Theme.Material.Dialog.Alert">
+        <item name="android:background">#12151c</item>
+        <item name="android:colorAccent">#4CC2FF</item>
+        <item name="android:textColorPrimary">#e8ebf2</item>
+        <item name="android:textColorSecondary">#8b93a7</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+    </style>
 </resources>

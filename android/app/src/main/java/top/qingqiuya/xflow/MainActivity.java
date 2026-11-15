@@ -237,37 +237,94 @@ public class MainActivity extends Activity {
         }
     }
 
-    /** API 用法说明：接口、示例 curl，地址按当前开关状态给 */
+    /** API 用法说明：自己搭布局，跟 App 的深色风格对齐（系统弹窗是灰底） */
     private void showApiDoc() {
         String ip = localIP();
         int port = ApiServer.DEFAULT_PORT;
         boolean on = api != null && api.isRunning();
         String base = "http://" + ip + ":" + port;
-        String state = on ? "当前：已开启" : "当前：未开启（点一下 API 按钮打开）";
-        String doc =
-                state + "\n\n" +
-                        "地址：" + base + "\n\n" +
-                        "查版本\n  GET  " + base + "/api/version\n\n" +
-                        "查任务\n  GET  " + base + "/api/jobs\n\n" +
-                        "加任务\n  POST " + base + "/api/add?url=<链接>&name=<文件名>\n" +
-                        "       name 可留空，按链接自动取\n\n" +
-                        "清空历史（已完成/失败的）\n  POST " + base + "/api/clear\n\n" +
-                        "单个任务\n  POST " + base + "/api/job/<id>?action=pause|resume|delete\n\n" +
-                        "命令行示例\n" +
-                        "  curl \"" + base + "/api/jobs\"\n" +
-                        "  curl -X POST \"" + base + "/api/add?url=https://example.com/a.iso\"\n\n" +
-                        "注意：只在局域网内可用，不要把这个端口映射到公网。";
-        new AlertDialog.Builder(this)
-                .setTitle("手机端 API")
-                .setMessage(doc)
-                .setPositiveButton("好", null)
-                .setNeutralButton("复制地址", (d, w) -> {
-                    android.content.ClipboardManager cm =
-                            (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
-                    cm.setPrimaryClip(android.content.ClipData.newPlainText("XFlow", base));
-                    Toast.makeText(this, "已复制 " + base, Toast.LENGTH_SHORT).show();
-                })
-                .show();
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setBackgroundColor(0xFF12151c);
+        box.setPadding(dp(20), dp(18), dp(20), dp(10));
+
+        TextView title = new TextView(this);
+        title.setText("手机端 API");
+        title.setTextColor(0xFFE8EBF2);
+        title.setTextSize(17);
+        title.setTypeface(null, android.graphics.Typeface.BOLD);
+        box.addView(title);
+
+        TextView state = new TextView(this);
+        state.setText(on ? "已开启" : "未开启 · 点一下 API 按钮打开");
+        state.setTextColor(on ? 0xFF3DDC84 : 0xFF8B93A7);
+        state.setTextSize(12);
+        state.setPadding(0, dp(4), 0, dp(12));
+        box.addView(state);
+
+        // 地址一行，可点复制
+        TextView addr = new TextView(this);
+        addr.setText(base);
+        addr.setTextColor(0xFF5CC9FF);
+        addr.setTextSize(13.5f);
+        addr.setTypeface(android.graphics.Typeface.MONOSPACE);
+        addr.setBackgroundResource(R.drawable.chip_bg);
+        addr.setPadding(dp(10), dp(9), dp(10), dp(9));
+        addr.setOnClickListener(v -> {
+            android.content.ClipboardManager cm =
+                    (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+            cm.setPrimaryClip(android.content.ClipData.newPlainText("XFlow", base));
+            Toast.makeText(this, "已复制", Toast.LENGTH_SHORT).show();
+        });
+        box.addView(addr, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        TextView body = new TextView(this);
+        body.setTextColor(0xFFC9D2E3);
+        body.setTextSize(11.5f);
+        body.setTypeface(android.graphics.Typeface.MONOSPACE);
+        body.setTextIsSelectable(true);
+        body.setPadding(0, dp(14), 0, dp(6));
+        body.setText(
+                "GET  /api/version\n" +
+                "GET  /api/jobs\n" +
+                "POST /api/add?url=<链接>&name=<名字>\n" +
+                "POST /api/clear\n" +
+                "POST /api/job/<id>?action=pause|resume|delete\n\n" +
+                "curl " + base + "/api/jobs\n" +
+                "curl -X POST \"" + base + "/api/add?url=...\"\n\n" +
+                "只在局域网可用，别把这个端口映射到公网。");
+        android.widget.ScrollView sv = new android.widget.ScrollView(this);
+        sv.addView(body);
+        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f);
+        box.addView(sv, slp);
+
+        Button ok = new Button(this);
+        ok.setText("知道了");
+        ok.setTextColor(0xFF04121C);
+        ok.setTextSize(14);
+        ok.setBackgroundResource(R.drawable.btn_bg);
+        ok.setStateListAnimator(null);
+        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(46));
+        blp.topMargin = dp(10);
+        box.addView(ok, blp);
+
+        final android.app.Dialog d = new android.app.Dialog(this);
+        d.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
+        d.setContentView(box);
+        android.view.Window w = d.getWindow();
+        if (w != null) {
+            w.setBackgroundDrawableResource(android.R.color.transparent);
+            android.view.WindowManager.LayoutParams lp = w.getAttributes();
+            lp.width = (int) (getResources().getDisplayMetrics().widthPixels * 0.88);
+            lp.height = android.view.WindowManager.LayoutParams.WRAP_CONTENT;
+            w.setAttributes(lp);
+        }
+        ok.setOnClickListener(v -> d.dismiss());
+        d.show();
     }
 
     private void paintApiChip(TextView chip, boolean on) {
@@ -340,7 +397,7 @@ public class MainActivity extends Activity {
                     Toast.makeText(this, "已经是最新版本 v" + myVer, Toast.LENGTH_SHORT).show();
                     return;
                 }
-                new AlertDialog.Builder(this)
+                new AlertDialog.Builder(this, R.style.DarkDialog)
                         .setTitle("发现新版本 v" + t)
                         .setMessage("当前 v" + myVer + " → 最新 v" + t + "\n\n要用浏览器打开下载页吗？")
                         .setPositiveButton("去下载", (d, w) -> {
@@ -385,7 +442,7 @@ public class MainActivity extends Activity {
         android.widget.ScrollView sv = new android.widget.ScrollView(this);
         sv.addView(tv);
 
-        new AlertDialog.Builder(this)
+        new AlertDialog.Builder(this, R.style.DarkDialog)
                 .setTitle("开源许可")
                 .setView(sv)
                 .setPositiveButton("好", null)
