@@ -105,6 +105,24 @@ func main() {
 		json.NewEncoder(w).Encode(checkUpdate())
 	})
 
+	mux.HandleFunc("/api/update/download", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			http.Error(w, "只收 POST", 405)
+			return
+		}
+		info := checkUpdate()
+		if !info.HasUpdate || info.Asset == "" {
+			json.NewEncoder(w).Encode(map[string]any{"ok": false, "err": "没有可下载的更新"})
+			return
+		}
+		j, err := mgr.AddHTTP(info.Asset, info.AssetName, currentDir(), 8)
+		if err != nil {
+			json.NewEncoder(w).Encode(map[string]any{"ok": false, "err": err.Error()})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{"ok": true, "id": j.ID, "name": info.AssetName, "version": info.Latest})
+	})
+
 	mux.HandleFunc("/api/version", func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{"version": Version})
 	})

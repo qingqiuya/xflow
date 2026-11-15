@@ -14,6 +14,8 @@ body{font:13.5px/1.55 "Segoe UI","Microsoft YaHei",sans-serif;background:var(--b
 .ver{font-size:11px;color:var(--dim);opacity:.75;border:1px solid var(--line);border-radius:5px;padding:1px 6px;transition:.15s}
 .ver.new{color:var(--acc);border-color:var(--acc);background:rgba(76,194,255,.12);opacity:1;cursor:pointer;font-weight:600}
 .ver.new:hover{background:rgba(76,194,255,.24);box-shadow:0 0 0 3px rgba(76,194,255,.12)}
+.ver.done{color:var(--ok);border-color:var(--ok);background:rgba(61,220,132,.12);cursor:default}
+.ver.done::before{content:"✓ "}
 .ver.new::before{content:"↑ ";opacity:.9}
 .addrow{display:flex;gap:8px}
 select{background:#0a0d12;border:1px solid var(--line);color:var(--fg);padding:10px 8px;border-radius:8px;font-size:13px;outline:none}
@@ -178,9 +180,39 @@ fetch('/api/update').then(r=>r.json()).then(d=>{
   const e=document.querySelector('#ver');
   if(!e) return;
   e.textContent = 'v' + d.current + ' → v' + d.latest;
-  e.title = '有新版本 v' + d.latest + '，点击去下载';
+  e.title = '有新版本 v' + d.latest + '，点击下载（' + (d.assetName || '') + '）';
   e.classList.add('new');
-  e.onclick = () => window.open(d.url || 'https://github.com/qingqiuya/xflow/releases', '_blank');
+  e.onclick = async () => {
+    if (e.dataset.busy) return;
+    e.dataset.busy = '1';
+    e.textContent = '准备下载…';
+    try {
+      const r = await (await fetch('/api/update/download', {method:'POST'})).json();
+      if (!r.ok) { e.textContent = '下载失败'; e.dataset.busy = ''; return; }
+      const t = setInterval(async () => {
+        let jobs = [];
+        try { jobs = ((await (await fetch('/api/jobs')).json()).jobs) || []; } catch (x) {}
+        const j = jobs.find(x => x.id === r.id);
+        if (!j) return;
+        if (j.state === 'done') {
+          clearInterval(t);
+          e.classList.remove('new'); e.classList.add('done');
+          e.textContent = '已下载 v' + r.version;
+          e.title = '安装包已存到下载目录：' + (j.file_path || r.name) + '（退出汐流后运行它）';
+          e.onclick = null; e.dataset.busy = '';
+          load();
+        } else if (j.state === 'error') {
+          clearInterval(t);
+          e.textContent = '下载失败'; e.dataset.busy = '';
+        } else {
+          const pct = j.total ? Math.round(j.done * 100 / j.total) : 0;
+          e.textContent = '下载中 ' + pct + '%';
+        }
+      }, 800);
+    } catch (err) {
+      e.textContent = '下载出错'; e.dataset.busy = '';
+    }
+  };
 }).catch(()=>{});
 
 let browsePath='';
