@@ -39,6 +39,9 @@ func main() {
 		}
 	}()
 
+	// Windows：BT 存储切回非 mmap 模式（见 envboot_windows.go），第一次会 re-exec 一次
+	ensureClassicFileIO()
+
 	// 单实例：只允许一个进程。
 	// 以前 alreadyRunning() 写好了却从来没人调用——表面上"只起一个"其实是
 	// 第二个实例抢 17777 端口失败 panic 掉的假象（2026-11-10 清秋发现）。
