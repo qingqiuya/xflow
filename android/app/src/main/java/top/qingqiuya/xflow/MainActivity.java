@@ -45,6 +45,20 @@ public class MainActivity extends Activity {
         jobList = findViewById(R.id.jobList);
         statText = findViewById(R.id.statText);
 
+        // 标题用蓝→绿渐变（跟桌面版 .brand b 一个色）
+        TextView title = findViewById(R.id.titleText);
+        if (title != null) {
+            title.post(() -> {
+                float w = title.getPaint().measureText(title.getText().toString());
+                android.graphics.Shader sh = new android.graphics.LinearGradient(
+                        0, 0, Math.max(w, 1), 0,
+                        0xFF5CC9FF, 0xFF3DDC84,
+                        android.graphics.Shader.TileMode.CLAMP);
+                title.getPaint().setShader(sh);
+                title.invalidate();
+            });
+        }
+
         // 副标题后面跟版本号：直接从包信息里读，不另外硬编码
         TextView sub = findViewById(R.id.subText);
         if (sub != null) {
