@@ -143,7 +143,6 @@ func startTray() {
 			systray.SetTitle("XFlow")
 			systray.SetTooltip("XFlow 下载器")
 			mShow := systray.AddMenuItem("显示窗口", "把窗口叫回来")
-			mHide := systray.AddMenuItem("隐藏到托盘", "藏起来继续下载")
 			systray.AddSeparator()
 			mQuit := systray.AddMenuItem("退出 XFlow", "退出下载器")
 			go func() {
@@ -151,8 +150,6 @@ func startTray() {
 					select {
 					case <-mShow.ClickedCh:
 						showWin()
-					case <-mHide.ClickedCh:
-						hideWin()
 					case <-mQuit.ClickedCh:
 						systray.Quit()
 						os.Exit(0)
