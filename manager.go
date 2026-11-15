@@ -222,17 +222,20 @@ func (m *Manager) Remove(id string) {
 		j.cancel()
 	}
 	// 取消后把没下完的临时文件一起清掉：只删 .part，已完成的正式文件不动。
-	// 给 cancel() 一点时间让下载协程退出并关掉句柄，否则 Windows 上删不掉。
+	// BT 任务的文件句柄要等 t.Drop() 走完才真正关闭，所以先等一会儿再删；
+	// 还删不掉（anacrolix 的 fileTorrentImpl.Close 是空实现，句柄要等进程退出才释放）
+	// 就记账，留给下次启动清理（见 cleanup.go）。
 	if j != nil && j.State != "done" && j.FilePath != "" {
 		part := j.FilePath + ".part"
 		go func() {
-			for i := 0; i < 20; i++ {
+			for i := 0; i < 60; i++ {
 				time.Sleep(150 * time.Millisecond)
 				if err := os.Remove(part); err == nil || os.IsNotExist(err) {
 					os.Remove(part + ".meta")
 					return
 				}
 			}
+			addPendingDelete(part)
 		}()
 	}
 	m.mu.Lock()

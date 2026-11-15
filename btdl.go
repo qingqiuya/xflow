@@ -179,6 +179,10 @@ func startBT(j *Job) {
 				j.State, j.Done = "done", j.Total
 				j.mu.Unlock()
 				t.Drop()
+				// 完成的任务也要从 btTors 里摘掉，否则一个又长又大的 map 永远不清
+				btMu.Lock()
+				delete(btTors, j.ID)
+				btMu.Unlock()
 				return
 			}
 		}

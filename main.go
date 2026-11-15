@@ -54,6 +54,9 @@ func main() {
 
 	enableDarkMode()
 
+	// 上次退出前删不掉的 BT 临时文件（见 cleanup.go）：新进程里旧句柄已释放，清一遍
+	flushPendingDeletes()
+
 	home, _ := os.UserHomeDir()
 	mgr = NewManager(filepath.Join(home, ".localdl.json"))
 	mgr.StartTicker()
