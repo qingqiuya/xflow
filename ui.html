@@ -137,9 +137,12 @@ button:active{transform:scale(.97)}
 .pbar.on{display:block}
 .pbar i{display:block;height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,#5cc9ff,#3ddc84);transition:width .12s}
 .drop-foot{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:8px;min-height:18px;font-size:11.5px;color:#6b7488}
-.pickmenu{display:none;gap:8px;justify-content:center;margin-top:12px}
-.pickmenu.on{display:flex}
-.drop.picking{border-color:var(--acc);background:rgba(76,194,255,.08)}
+.pickrow{display:flex;gap:12px;justify-content:center;align-items:center;margin-top:15px}
+.primary.sm{padding:7px 18px;font-size:13px;border-radius:9px}
+.linky{background:none;border:0;color:#6b7488;font-size:12.5px;cursor:pointer;padding:4px 2px;text-decoration:underline;text-underline-offset:3px;text-decoration-color:#3a4457}
+.linky:hover{color:var(--acc);text-decoration-color:var(--acc)}
+.drop.tight{padding:18px 16px}
+.drop.tight .pickrow{display:none}
 .msgline{font-size:12px;color:var(--warn);margin-top:9px;min-height:16px}
 .sw{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--dim);cursor:pointer;font-weight:400}
 .sw input{display:none}
@@ -234,14 +237,14 @@ button:active{transform:scale(.97)}
   <!-- 发送 -->
   <div class="drop" id="dropZone">
     <div class="drop-ico" id="dropIco">↑</div>
-    <div class="drop-t" id="dropTitle">点这里选文件，或拖进来</div>
+    <div class="drop-t" id="dropTitle">拖文件或文件夹到这里</div>
     <div class="drop-s" id="dropTo">先选上面一台设备</div>
+    <div class="pickrow" id="pickRow">
+      <button class="primary sm" id="pickFile">选择文件</button>
+      <button class="linky" id="pickDir">或选择文件夹</button>
+    </div>
     <div class="pbar" id="pbar"><i id="pfill"></i></div>
     <div class="drop-foot"><span id="pinfo"></span><button class="tiny" id="sendCancel" style="display:none">取消</button></div>
-    <div class="pickmenu" id="pickMenu">
-      <button class="tiny" id="pickFile">选择文件</button>
-      <button class="tiny" id="pickDir">选择文件夹</button>
-    </div>
   </div>
 
   <!-- 收件箱 -->
@@ -527,6 +530,9 @@ async function shSendFiles(files, paths){
   const list=(files||[]).map((f,i)=>({file:f, path:(paths&&paths[i])||f.name}));
   if(!list.length) return;
   sending=true;
+  const pickRow=document.getElementById('pickRow');
+  if(pickRow) pickRow.style.display='none';
+  document.getElementById('dropZone').classList.add('tight');
   const cancelBtn=document.getElementById('sendCancel');
   if(cancelBtn) cancelBtn.style.display='inline-block';
   curTotal=list.reduce((a,x)=>a+x.file.size,0); curSent=0;
@@ -542,7 +548,7 @@ async function shSendFiles(files, paths){
     }
     shProgress(curTotal, curTotal, '100%');
     if(msg) msg.textContent='已发送 '+okN+' 个文件到 '+shPeer.name;
-    if(title) title.textContent='点这里选文件，或拖进来';
+    if(title) title.textContent='拖文件或文件夹到这里';
     if(okN) shLoadInbox();
   }catch(err){
     if(msg) msg.textContent='发了 '+okN+'/'+list.length+' 个，失败：'+(err.message||err);
@@ -550,36 +556,29 @@ async function shSendFiles(files, paths){
   }finally{
     sending=false; curXhr=null;
     if(cancelBtn) cancelBtn.style.display='none';
+    if(pickRow) pickRow.style.display='';
+    document.getElementById('dropZone').classList.remove('tight');
     setTimeout(()=>{ const b=document.getElementById('pbar'); if(b) b.classList.remove('on') }, 2500);
   }
 }
 
 document.getElementById('pickFile').onclick=e=>{
-  e.stopPropagation();
-  hidePick(); document.getElementById('shFile').click();
+  e.stopPropagation(); document.getElementById('shFile').click();
 };
 document.getElementById('pickDir').onclick=e=>{
-  e.stopPropagation();
-  hidePick(); document.getElementById('shDir').click();
+  e.stopPropagation(); document.getElementById('shDir').click();
 };
-function showPick(){ const m=document.getElementById('pickMenu'), d=document.getElementById('dropZone'); if(m){m.classList.add('on')} if(d){d.classList.add('picking')} }
-function hidePick(){ const m=document.getElementById('pickMenu'), d=document.getElementById('dropZone'); if(m){m.classList.remove('on')} if(d){d.classList.remove('picking')} }
-document.addEventListener('click',e=>{
-  const d=document.getElementById('dropZone');
-  if(d && !d.contains(e.target)) hidePick();
-});
 (function(){
   const dz=document.getElementById('dropZone'), fi=document.getElementById('shFile'), di=document.getElementById('shDir');
   const cancel=document.getElementById('sendCancel');
   if(cancel) cancel.onclick=e=>{ e.preventDefault(); e.stopPropagation(); if(curXhr){ try{ curXhr.abort() }catch(err){} } };
   if(!dz||!fi) return;
+  // 点虚线框空白处 = 选文件（最常用那条路）
   dz.addEventListener('click',e=>{
     if(!shPeer){ e.preventDefault(); e.stopPropagation(); alert('先选一台设备'); return }
-    // 点在进度/取消/选择项上不重复弹
     if(e.target.closest('button')) return;
     if(sending) return;
-    const m=document.getElementById('pickMenu');
-    if(m && m.classList.contains('on')) hidePick(); else showPick();
+    document.getElementById('shFile').click();
   });
   ['dragenter','dragover'].forEach(t=>dz.addEventListener(t,e=>{e.preventDefault();dz.classList.add('hot')}));
   ['dragleave','drop'].forEach(t=>dz.addEventListener(t,e=>{e.preventDefault();dz.classList.remove('hot')}));
