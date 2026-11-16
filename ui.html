@@ -98,6 +98,46 @@ button:active{transform:scale(.97)}
 .drow .ico{opacity:.7}
 .dlg-ft{display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--line);align-items:center}
 .dlg-ft .grow{flex:1}
+
+/* ---- 互传页（卡片式） ---- */
+.sec{margin-bottom:16px}
+.sec-hd{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;color:var(--dim);margin-bottom:9px;letter-spacing:.3px}
+.sec-tip{font-weight:400;color:#5b6478;font-size:11.5px}
+.devgrid{display:flex;flex-wrap:wrap;gap:9px}
+.devcard{display:flex;align-items:center;gap:11px;background:rgba(26,31,42,.85);border:1px solid #2b3446;border-radius:12px;padding:11px 15px;cursor:pointer;transition:.15s;position:relative;min-width:210px}
+.devcard:hover{border-color:#33405a;background:rgba(29,35,47,.85)}
+.devcard.on{border-color:var(--acc);background:rgba(76,194,255,.10);box-shadow:0 0 0 3px rgba(76,194,255,.10)}
+.devcard .dot{width:7px;height:7px;border-radius:99px;background:var(--ok);box-shadow:0 0 8px rgba(61,220,132,.7);flex:0 0 auto}
+.devcard.off .dot{background:#5b6478;box-shadow:none}
+.devcard .dn{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:300px}
+.devcard .di{font-size:11px;color:#6b7488;margin-top:1px}
+.devcard .dn-wrap{min-width:0}
+.drop{border:1.5px dashed #2b3446;border-radius:14px;padding:26px 16px;text-align:center;cursor:pointer;transition:.15s;background:rgba(18,21,28,.45);margin-bottom:16px}
+.drop:hover{border-color:var(--acc);background:rgba(76,194,255,.06)}
+.drop.hot{border-color:var(--acc);background:rgba(76,194,255,.12);transform:scale(.995)}
+.drop-ico{font-size:22px;color:var(--acc);opacity:.85;line-height:1}
+.drop-t{font-size:14px;font-weight:600;margin-top:8px}
+.drop-s{font-size:11.5px;color:var(--dim);margin-top:4px}
+.inbox{display:flex;flex-direction:column;gap:6px}
+.irow{display:flex;align-items:center;gap:9px;background:rgba(26,31,42,.9);border:1px solid #2b3446;border-radius:9px;padding:8px 12px;font-size:12.5px}
+.irow .ii{opacity:.55}
+.irow .in2{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.irow .is{color:#5b6478;font-size:11px}
+.addrrow{display:none;gap:7px;margin-top:9px}
+.addrrow input{flex:1;padding:7px 10px;font-size:12.5px;background:#0f1420;border:1px solid var(--line);border-radius:8px;color:var(--fg);outline:none}
+.addrrow input:focus{border-color:var(--acc)}
+.tiny{background:#1c2230;color:var(--fg);padding:6px 12px;font-size:12px;font-weight:500;border-radius:8px;border:0;cursor:pointer}
+.tiny:hover{background:#242c3d}
+.cliprow{display:flex;gap:7px;align-items:center;margin-top:4px}
+.cliprow input{flex:1;padding:8px 11px;font-size:12.5px;background:#0f1420;border:1px solid var(--line);border-radius:8px;color:var(--fg);outline:none}
+.cliprow input:focus{border-color:var(--acc)}
+.msgline{font-size:12px;color:var(--warn);margin-top:9px;min-height:16px}
+.sw{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--dim);cursor:pointer;font-weight:400}
+.sw input{display:none}
+.sw i{width:32px;height:18px;border-radius:99px;background:#2a3244;position:relative;transition:.18s;flex:0 0 auto}
+.sw i::after{content:"";position:absolute;left:2px;top:2px;width:14px;height:14px;border-radius:99px;background:#8b93a7;transition:.18s}
+.sw input:checked + i{background:rgba(76,194,255,.35)}
+.sw input:checked + i::after{left:16px;background:var(--acc)}
 </style></head>
 <body>
 <div class="top">
@@ -169,39 +209,52 @@ button:active{transform:scale(.97)}
     <button class="primary" id="setCancel">关闭</button></div>
 </div></div>
 <div id="shareMask" style="display:none">
-  <div class="dlg-hd" style="display:none">互传 · 局域网文件</div>
-  <div class="dlg-path" style="display:flex;gap:8px;align-items:center">
-    <select id="shDev" style="max-width:300px;padding:6px 8px"></select>
-    <span id="shTokWrap" style="display:none;display:flex;gap:6px;align-items:center">
-      <input id="shTok" placeholder="对方令牌" style="width:200px;padding:6px 8px">
-      <button class="mini" id="shTokSave">记住</button>
-    </span>
+  <!-- 设备 -->
+  <div class="sec">
+    <div class="sec-hd">设备<span class="sec-tip" id="devTip"></span>
+      <span class="grow" style="flex:1"></span>
+      <button class="tiny" id="shAddrToggle">+ 手动加</button>
+    </div>
+    <div class="devgrid" id="devGrid"></div>
+    <div class="addrrow" id="shAddrRow">
+      <input id="shAddr" placeholder="10.11.11.147:17777 或 [240e::1]:17777">
+      <button class="tiny" id="shAddrAdd">添加</button>
+    </div>
+    <div class="addrrow" id="shTokWrap">
+      <input id="shTok" placeholder="这台要令牌（对方开的是局域网模式）">
+      <button class="tiny" id="shTokSave">记住</button>
+    </div>
   </div>
-  <div class="dlg-q" style="gap:10px;align-items:center">
-    <label style="display:flex;align-items:center;gap:6px;color:var(--fg);font-size:12.5px;cursor:pointer">
-      <input type="checkbox" id="shAuto"> 自动接收
-    </label>
-    <span style="color:var(--dim);font-size:12px">关掉后别人推来的文件要你点「接收」</span>
-    <span class="grow" style="flex:1"></span>
-    <span id="shPend" style="color:var(--warn);font-size:12px"></span>
+
+  <!-- 发送 -->
+  <div class="drop" id="dropZone">
+    <div class="drop-ico">↑</div>
+    <div class="drop-t">点这里选文件，或拖进来</div>
+    <div class="drop-s" id="dropTo">先选上面一台设备</div>
   </div>
-  <div class="dlg-q" style="gap:8px;align-items:center">
-    <input id="shAddr" placeholder="手动加地址：10.11.11.147:17777 或 [240e:…]:17777" style="flex:1;padding:6px 9px;font-size:12.5px">
-    <button class="mini" id="shAddrAdd">添加</button>
+
+  <!-- 收件箱 -->
+  <div class="sec">
+    <div class="sec-hd">收件箱
+      <span class="grow" style="flex:1"></span>
+      <label class="sw"><input type="checkbox" id="shAuto"><i></i>自动收</label>
+    </div>
+    <div class="inbox" id="shInbox"></div>
   </div>
-  <div class="dlg-q"><span style="color:var(--dim);font-size:12px">📥 收件箱</span>
-    <span id="shInbox" style="font-size:12px;color:var(--dim)">读取中…</span></div>
-  <div class="dlg-q" style="gap:8px">
-    <button class="mini" id="shClipSend" title="把本机剪贴板发到对方">📋 发剪贴板</button>
-    <button class="mini" id="shClipGet" title="把对方剪贴板取过来">📥 取剪贴板</button>
-    <input id="shText" placeholder="或直接打一段文字发过去" style="flex:1;padding:6px 9px;font-size:12.5px">
-    <button class="mini" id="shTextSend">发送</button>
+
+  <!-- 剪贴板 -->
+  <div class="cliprow">
+    <button class="tiny" id="shClipSend">发剪贴板</button>
+    <button class="tiny" id="shClipGet">取剪贴板</button>
+    <input id="shText" placeholder="或者打一段文字发过去">
+    <button class="tiny" id="shTextSend">发送</button>
   </div>
-  <div class="dlg-ft">
-    <input type="file" id="shFile" multiple hidden><button class="primary" id="shPick">选择文件发送…</button>
-    <span class="grow"></span>
-    <span id="shMsg" style="color:var(--warn);font-size:12px"></span>
-    <button class="ghost" id="shClose">回到下载</button>
+  <div class="msgline" id="shMsg"></div>
+  <input type="file" id="shFile" multiple hidden>
+  <div style="display:none">
+    <span id="shWhere"></span><div id="shList"></div>
+    <button id="shPick"></button><button id="shClose"></button>
+    <select id="shDev"></select>
   </div>
 </div>
 <div class="pages">
@@ -234,6 +287,11 @@ async function shJ(u,opt){
 // 手动地址（公网用）：存 localStorage，混进设备列表
 function shManual(){ try { return JSON.parse(localStorage.getItem('xflowManual')||'[]') } catch(e){ return [] } }
 function shSaveManual(list){ localStorage.setItem('xflowManual', JSON.stringify(list)) }
+document.getElementById('shAddrToggle').onclick = () => {
+  const r=document.getElementById('shAddrRow');
+  r.style.display = r.style.display==='flex' ? 'none' : 'flex';
+  if(r.style.display==='flex') document.getElementById('shAddr').focus();
+};
 document.getElementById('shAddrAdd').onclick = () => {
   const v = document.getElementById('shAddr').value.trim();
   if(!v) return;
@@ -279,25 +337,41 @@ async function shOpen(){
       shPeers.push({ip:m.ip, port:m.port, name:'手动 '+m.ip, os:'manual'});
     }
   }
-  const sel=document.getElementById('shDev');
+  renderDevCards();
+  if(shPeers.length) pickSharePeer(0);
+  else {
+    document.getElementById('dropTo').textContent='先选上面一台设备（同一局域网开另一台 XFlow 就会出现）';
+  }
+}
+
+function renderDevCards(){
+  const box=document.getElementById('devGrid');
+  if(!box) return;
   if(!shPeers.length){
-    sel.innerHTML='<option>没发现别的设备</option>';
-    const _l=document.getElementById('shList');
-    if(_l) _l.innerHTML='<div class="empty"><b>📡</b>同一局域网里另开一台 XFlow 就会出现';
-    const _w=document.getElementById('shWhere');
-    if(_w) _w.textContent='';
+    box.innerHTML='<div style="color:#5b6478;font-size:12.5px;padding:6px 2px">没发现别的设备</div>';
+    document.getElementById('devTip').textContent='';
     return;
   }
-  sel.innerHTML=shPeers.map((p,i)=>'<option value="'+i+'">'+esc(p.name||p.ip)+' · '+esc(p.ip)+':'+p.port+'</option>').join('');
-  sel.onchange=()=>{ pickSharePeer(parseInt(sel.value,10)) };
-  pickSharePeer(0);
+  box.innerHTML=shPeers.map((p,i)=>{
+    const on = shPeer && shPeer.ip===p.ip && shPeer.port===p.port;
+    return '<div class="devcard'+(on?' on':'')+'" data-i="'+i+'">'
+      +'<span class="dot"></span>'
+      +'<div class="dn-wrap"><div class="dn">'+esc(p.name||p.ip)+'</div>'
+      +'<div class="di">'+esc(p.ip)+':'+p.port+(p.os?' · '+esc(p.os):'')+'</div></div></div>';
+  }).join('');
+  box.querySelectorAll('.devcard').forEach(el=>{
+    el.onclick=()=>pickSharePeer(parseInt(el.dataset.i,10));
+  });
+  document.getElementById('devTip').textContent=shPeers.length+' 台在线';
 }
 function pickSharePeer(i){
   const p=shPeers[i]; if(!p) return;
   shPeer={ip:p.ip,port:p.port,name:p.name||p.ip};
   document.getElementById('shTok').value=shTokOf(shPeer.ip);
-  document.getElementById('shTokWrap').style.display=shTokOf(shPeer.ip)?'none':'flex';
   document.getElementById('shMsg').textContent='';
+  const dt=document.getElementById('dropTo');
+  if(dt) dt.textContent='发到 '+shPeer.name+' 的收件目录';
+  renderDevCards();
   shBrowse('');
 }
 // 收件箱：列出收件目录里的文件
@@ -383,8 +457,19 @@ document.getElementById('shTokSave').onclick=()=>{
   shBrowse(shPath||'');
 };
 document.getElementById('shPick').onclick=()=>document.getElementById('shFile').click();
-document.getElementById('shFile').onchange=async e=>{
-  const files=Array.from(e.target.files||[]); if(!files.length) return;
+(function(){
+  const dz=document.getElementById('dropZone'), fi=document.getElementById('shFile');
+  if(!dz||!fi) return;
+  dz.onclick=()=>{ if(!shPeer){ alert('先选一台设备'); return } fi.click() };
+  ['dragenter','dragover'].forEach(t=>dz.addEventListener(t,e=>{e.preventDefault();dz.classList.add('hot')}));
+  ['dragleave','drop'].forEach(t=>dz.addEventListener(t,e=>{e.preventDefault();dz.classList.remove('hot')}));
+  dz.addEventListener('drop',e=>{
+    if(!shPeer){ alert('先选一台设备'); return }
+    const files=Array.from((e.dataTransfer&&e.dataTransfer.files)||[]);
+    if(files.length) shSendFiles(files);
+  });
+})();
+async function shSendFiles(files){
   const msg=document.getElementById('shMsg');
   let okN=0, lastErr='';
   for(let i=0;i<files.length;i++){
@@ -396,9 +481,14 @@ document.getElementById('shFile').onchange=async e=>{
     }catch(err){ lastErr=err.message||String(err) }
   }
   msg.textContent = okN===files.length
-    ? ('已发送 '+okN+' 个文件到对方收件目录')
+    ? ('已发送 '+okN+' 个文件到 '+shPeer.name+' 的收件目录')
     : ('发了 '+okN+'/'+files.length+' 个'+(lastErr?('，最后一个失败：'+lastErr):''));
+  if(okN) shLoadInbox();
+}
+document.getElementById('shFile').onchange=e=>{
+  const files=Array.from(e.target.files||[]);
   e.target.value='';
+  if(files.length) shSendFiles(files);
 };
 // 剪贴板 / 文本：本机浏览器剪贴板 ↔ 对方
 function shMsgShow(t){ document.getElementById('shMsg').textContent = t; }
