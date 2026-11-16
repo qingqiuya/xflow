@@ -159,17 +159,16 @@
                 android:gravity="center_vertical"
                 android:paddingTop="8dp">
 
-                <EditText
+                <TextView
                     android:id="@+id/textInput"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:hint="打一段字发过去"
+                    android:text="点这里输入文字…"
                     android:textSize="12.5sp"
-                    android:inputType="textMultiLine"
-                    android:maxLines="3"
-                    android:textColorHint="#6b7385"
-                    android:textColor="#e8ebf2"
+                    android:gravity="center_vertical"
+                    android:minHeight="46dp"
+                    android:textColor="#8b93a7"
                     android:background="@drawable/field"
                     android:paddingHorizontal="12dp"
                     android:paddingVertical="10dp" />

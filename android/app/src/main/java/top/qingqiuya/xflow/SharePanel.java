@@ -55,7 +55,8 @@ public class SharePanel {
 
     private LinearLayout devicesBox, inboxBox;
     private TextView targetText, status, selfTag;
-    private EditText addrInput, textInput;
+    private EditText addrInput;
+    private TextView textInput;
     private String lastDevSig = "";
 
     private final Activity act;
@@ -78,15 +79,9 @@ public class SharePanel {
         root.findViewById(R.id.pickFile).setOnClickListener(v -> pickFile());
         root.findViewById(R.id.clipSend).setOnClickListener(v -> sendMyClipboard());
         root.findViewById(R.id.clipGet).setOnClickListener(v -> getPeerClipboard());
-        root.findViewById(R.id.textSend).setOnClickListener(v -> {
-            String t = textInput.getText().toString().trim();
-            if (t.isEmpty()) return;
-            postClipboard(t, true);
-        });
+        root.findViewById(R.id.textSend).setOnClickListener(v -> showTextDialog());
 
-        textInput.setOnFocusChangeListener((v, has) -> {
-            if (has) ensureVisible(v);
-        });
+        textInput.setOnClickListener(v -> showTextDialog());
         addrInput.setOnFocusChangeListener((v, has) -> {
             if (has) ensureVisible(v);
         });
@@ -665,6 +660,31 @@ public class SharePanel {
                 sv.requestChildRectangleOnScreen(v, r, true);
             }
         }, 320);
+    }
+
+    /** 输入文字用独立对话框：键盘弹起时对话框整个被顶上去，不依赖页面滚动。 */
+    private void showTextDialog() {
+        final android.widget.EditText e = new android.widget.EditText(act);
+        e.setHint("打一段字发过去");
+        e.setTextSize(14f);
+        e.setMinLines(2);
+        e.setMaxLines(6);
+        e.setInputType(android.text.InputType.TYPE_CLASS_TEXT
+                | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+        int pad = dp(18);
+        android.widget.LinearLayout box = new android.widget.LinearLayout(act);
+        box.setOrientation(android.widget.LinearLayout.VERTICAL);
+        box.setPadding(pad, dp(6), pad, 0);
+        box.addView(e);
+        new android.app.AlertDialog.Builder(act, R.style.DarkDialog)
+                .setTitle("发送文字")
+                .setView(box)
+                .setPositiveButton("发送", (d, w) -> {
+                    String t = e.getText().toString().trim();
+                    if (!t.isEmpty()) postClipboard(t, false);
+                })
+                .setNegativeButton("取消", null)
+                .show();
     }
 
     private int dp(int v) {
