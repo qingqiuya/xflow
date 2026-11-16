@@ -57,6 +57,14 @@ button:active{transform:scale(.97)}
 .empty{text-align:center;color:var(--dim);padding:60px 20px;font-size:13px}
 .empty b{display:block;font-size:30px;margin-bottom:10px;opacity:.35}
 .st{font-size:12.3px;color:var(--dim)}
+.pages{flex:1;display:flex;flex-direction:column;min-height:0}
+.page{flex:1;display:none;flex-direction:column;min-height:0;overflow:hidden}
+.page.on{display:flex}
+.tabs{display:flex;gap:18px;padding:0 16px;border-bottom:1px solid var(--line);background:rgba(14,17,24,.55);flex:0 0 auto}
+.tabs>a{color:var(--dim);font-size:15px;font-weight:600;padding:9px 2px 8px;cursor:pointer;border-bottom:2px solid transparent;transition:.15s}
+.tabs>a.on{color:var(--fg);border-bottom-color:var(--acc)}
+.tabs>a:hover{color:var(--fg)}
+#shareMask>div:not(.dlg-ft){padding-left:0;padding-right:0}
 .mask{position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(2px);display:none;align-items:center;justify-content:center;z-index:50}
 .mask.on{display:flex}
 .dlg{width:560px;max-height:82vh;background:#141821;border:1px solid var(--line);border-radius:14px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)}
@@ -103,7 +111,6 @@ button:active{transform:scale(.97)}
     <button class="ghost" id="dir">下载目录</button>
     <button class="ghost" id="clear" title="清掉已完成/失败的历史记录">清空历史</button>
     <button class="ghost" id="shareChip" title="互传总开关（关掉后别人传不进来）">互传开</button>
-    <button class="ghost" id="shareBtn" title="在这台和多台设备之间传文件">互传…</button>
     <button class="ghost" id="settingsBtn" title="对外接口 / API 用法">调用 API 下载</button>
   </div>
 </div>
@@ -144,8 +151,8 @@ button:active{transform:scale(.97)}
   <div class="dlg-ft"><span class="grow"></span>
     <button class="primary" id="setCancel">关闭</button></div>
 </div></div>
-<div class="mask" id="shareMask" style="display:none"><div class="dlg" style="width:780px">
-  <div class="dlg-hd">互传 · 局域网文件</div>
+<div id="shareMask" style="display:none">
+  <div class="dlg-hd" style="display:none">互传 · 局域网文件</div>
   <div class="dlg-path" style="display:flex;gap:8px;align-items:center">
     <select id="shDev" style="max-width:300px;padding:6px 8px"></select>
     <span id="shTokWrap" style="display:none;display:flex;gap:6px;align-items:center">
@@ -180,10 +187,16 @@ button:active{transform:scale(.97)}
     <input type="file" id="shFile" hidden><button class="ghost" id="shPick">上传到这里…</button>
     <span class="grow"></span>
     <span id="shMsg" style="color:var(--warn);font-size:12px"></span>
-    <button class="ghost" id="shClose">关闭</button>
+    <button class="ghost" id="shClose">回到下载</button>
   </div>
-</div></div>
-<div class="list" id="list"><div class="empty"><b>⬇</b>还没有任务</div></div>
+</div>
+<div class="tabs"><a id="tabDl" class="on">下载</a><a id="tabSh">互传</a></div>
+<div class="pages">
+  <div class="page on" id="pageDl">
+    <div class="list" id="list"><div class="empty"><b>⬇</b>还没有任务</div></div>
+  </div>
+  <div class="page" id="pageSh"></div>
+</div>
 <script>
 const $=s=>document.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -223,8 +236,27 @@ document.getElementById('shAddrAdd').onclick = () => {
   shOpen();
 };
 
+function showPage(which){
+  const onSh = which === 'share';
+  document.getElementById('pageDl').classList.toggle('on', !onSh);
+  document.getElementById('pageSh').classList.toggle('on', onSh);
+  document.getElementById('tabDl').classList.toggle('on', !onSh);
+  document.getElementById('tabSh').classList.toggle('on', onSh);
+  if (onSh) {
+    const holder = document.getElementById('pageSh');
+    const body = document.getElementById('shareMask');
+    if (body.parentNode !== holder) holder.appendChild(body);
+    body.style.display='flex';
+    body.style.flexDirection='column';
+    body.style.flex='1';
+    body.style.minHeight='0';
+    body.style.overflow='auto';
+    body.style.padding='10px 16px 14px';
+  }
+}
+
 async function shOpen(){
-  document.getElementById('shareMask').style.display='flex';
+  showPage('share');
   shRefreshAuto();
   shLoadInbox();
   const d=await (await fetch('/api/peers')).json();
@@ -320,8 +352,9 @@ document.getElementById('shareChip').onclick = async () => {
 };
 shPaintChip();
 
-document.getElementById('shareBtn').onclick=()=>shOpen();
-document.getElementById('shClose').onclick=()=>{ document.getElementById('shareMask').style.display='none' };
+document.getElementById('shClose').onclick=()=>showPage('dl');
+document.getElementById('tabDl').onclick=()=>showPage('dl');
+document.getElementById('tabSh').onclick=()=>shOpen();
 document.getElementById('shUp').onclick=async()=>{
   const d=await shJ(shBase()+'/api/fs?path='+encodeURIComponent(shPath));
   if(d.parent) shBrowse(d.parent);
@@ -394,7 +427,7 @@ document.getElementById('shAuto').onchange=async e=>{
   }catch(err){}
 };
 async function shPollPending(){
-  if(document.getElementById('shareMask').style.display!=='flex') return;
+  if(!document.getElementById('pageSh').classList.contains('on')) return;
   try{
     const d=await (await fetch('/api/incoming')).json();
     const fs=d.files||[];
