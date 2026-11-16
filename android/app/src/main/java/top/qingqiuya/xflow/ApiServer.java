@@ -39,6 +39,22 @@ public class ApiServer {
     private Thread loop;
     private volatile boolean running;
 
+    /** 待确认的接收（自动接收关掉时用） */
+    private static class Pend {
+        String id = "";
+        String name = "";
+        String from = "";
+        String tmp = "";
+        long size = 0;
+    }
+
+    private final java.util.List<Pend> pending = new java.util.ArrayList<>();
+
+    private boolean autoAccept() {
+        return ctx.getSharedPreferences("xflow_share", Context.MODE_PRIVATE)
+                .getBoolean("auto_accept", true);
+    }
+
     public ApiServer(Context ctx) {
         this.ctx = ctx.getApplicationContext();
     }
@@ -159,9 +175,40 @@ public class ApiServer {
             String fname = headers.getOrDefault("x-file-name", "");
             if (!fname.isEmpty() && "/api/upload".equals(path)) {
                 try {
-                    String saved = Transfer.saveStream(ctx, raw, dec(fname), len);
-                    writeResponse(sock, 200, "{\"ok\":true,\"saved\":[\"" + esc(saved)
-                            + "\"],\"dir\":\"Download/" + Transfer.SUBDIR + "\"}");
+                    if (autoAccept()) {
+                        String saved = Transfer.saveStream(ctx, raw, dec(fname), len);
+                        writeResponse(sock, 200, "{\"ok\":true,\"saved\":[\"" + esc(saved)
+                                + "\"],\"dir\":\"Download/" + Transfer.SUBDIR + "\"}");
+                    } else {
+                        // 手动同意：先落临时，等用户点接收
+                        String id = Long.toHexString(System.nanoTime());
+                        java.io.File dir = new java.io.File(ctx.getCacheDir(), "incoming");
+                        dir.mkdirs();
+                        java.io.File tmp = new java.io.File(dir, id);
+                        long got = 0;
+                        try (java.io.FileOutputStream fo = new java.io.FileOutputStream(tmp)) {
+                            byte[] buf = new byte[64 * 1024];
+                            long remain = len;
+                            while (remain > 0) {
+                                int want = (int) Math.min(buf.length, remain);
+                                int n = raw.read(buf, 0, want);
+                                if (n <= 0) break;
+                                fo.write(buf, 0, n);
+                                remain -= n;
+                                got += n;
+                            }
+                        }
+                        Pend p = new Pend();
+                        p.id = id;
+                        p.name = dec(fname);
+                        p.from = String.valueOf(sock.getInetAddress().getHostAddress());
+                        p.tmp = tmp.getAbsolutePath();
+                        p.size = got;
+                        synchronized (pending) {
+                            pending.add(p);
+                        }
+                        writeResponse(sock, 200, "{\"ok\":true,\"pending\":true,\"id\":\"" + id + "\"}");
+                    }
                 } catch (Exception e) {
                     writeResponse(sock, 500, "{\"ok\":false,\"err\":\"" + esc(String.valueOf(e.getMessage())) + "\"}");
                 }
@@ -193,7 +240,17 @@ public class ApiServer {
                 }
                 body = new String(buf, 0, got, StandardCharsets.UTF_8);
             }
-            if (!body.isEmpty()) parseFlatJSON(body, q);
+            if (!body.isEmpty()) {
+                parseFlatJSON(body, q);
+                // 也认表单格式（curl -d "autoAccept=false" 这种）
+                String bt = body.trim();
+                if (!bt.startsWith("{") && bt.contains("=")) {
+                    for (String kv : bt.split("&")) {
+                        int e = kv.indexOf('=');
+                        if (e > 0) q.put(dec(kv.substring(0, e)), dec(kv.substring(e + 1)));
+                    }
+                }
+            }
 
             String out = route(method, path, q);
             if (out == null) return;
@@ -274,9 +331,57 @@ public class ApiServer {
             }
         }
         if (path.equals("/api/share")) {
-            // 互传：告诉对方收到的文件放哪、我这边的收件目录叫啥
+            // 互传：收件目录 + 自动接收开关（POST 可以改）
+            if ("POST".equals(method)) {
+                String v = q.getOrDefault("autoAccept", "");
+                if (!v.isEmpty()) {
+                    boolean b = "true".equalsIgnoreCase(v) || "1".equals(v);
+                    ctx.getSharedPreferences("xflow_share", Context.MODE_PRIVATE)
+                            .edit().putBoolean("auto_accept", b).apply();
+                }
+            }
             return "{\"ok\":true,\"platform\":\"android\",\"dir\":\"Download/" + Transfer.SUBDIR
-                    + "\",\"autoAccept\":true}";
+                    + "\",\"autoAccept\":" + autoAccept() + "}";
+        }
+        if (path.equals("/api/incoming")) {
+            if ("POST".equals(method)) {
+                String id = q.getOrDefault("id", "");
+                String act = q.getOrDefault("act", "");
+                Pend hit = null;
+                synchronized (pending) {
+                    for (Pend p : pending) {
+                        if (p.id.equals(id)) {
+                            hit = p;
+                            break;
+                        }
+                    }
+                    if (hit != null) pending.remove(hit);
+                }
+                if (hit == null) return "{\"ok\":false,\"err\":\"没这个待接收文件\"}";
+                java.io.File tmp = new java.io.File(hit.tmp);
+                if (!"accept".equals(act)) {
+                    tmp.delete();
+                    return "{\"ok\":true,\"act\":\"reject\"}";
+                }
+                try (java.io.FileInputStream in = new java.io.FileInputStream(tmp)) {
+                    String saved = Transfer.saveStream(ctx, in, hit.name, tmp.length());
+                    tmp.delete();
+                    return "{\"ok\":true,\"act\":\"accept\",\"saved\":\"" + esc(saved) + "\"}";
+                } catch (Exception e) {
+                    return "{\"ok\":false,\"err\":\"" + esc(String.valueOf(e.getMessage())) + "\"}";
+                }
+            }
+            StringBuilder sb = new StringBuilder("{\"ok\":true,\"files\":[");
+            synchronized (pending) {
+                for (int i = 0; i < pending.size(); i++) {
+                    if (i > 0) sb.append(',');
+                    Pend p = pending.get(i);
+                    sb.append("{\"id\":\"").append(p.id).append("\",\"name\":\"").append(esc(p.name))
+                            .append("\",\"size\":").append(p.size)
+                            .append(",\"from\":\"").append(esc(p.from)).append("\"}");
+                }
+            }
+            return sb.append("]}").toString();
         }
         if (path.equals("/api/files")) {
             List<Transfer.Item> items = Transfer.list(ctx);

@@ -91,6 +91,48 @@ public class ShareDialog {
         tok.setText(prefs(act).getString("tok_" + peer.ip, ""));
         box.addView(tok);
 
+        android.widget.CheckBox autoBox = new android.widget.CheckBox(act);
+        autoBox.setText("自动接收（关掉后别人推来的文件要在这点「接收」）");
+        autoBox.setTextSize(13);
+        autoBox.setChecked(prefs(act).getBoolean("auto_accept", true));
+        autoBox.setOnCheckedChangeListener((v, checked) ->
+                prefs(act).edit().putBoolean("auto_accept", checked).apply());
+        box.addView(autoBox);
+
+        final TextView pendView = new TextView(act);
+        pendView.setTextColor(Color.parseColor("#ffc857"));
+        pendView.setTextSize(12);
+        box.addView(pendView);
+
+        // 每 2 秒问一次自己（/api/incoming），有待接收就在这儿列出来
+        final Runnable[] poll = new Runnable[1];
+        poll[0] = () -> {
+            if (activityRef == null || !activityRef.hasWindowFocus()) {
+                UI.postDelayed(poll[0], 2000);
+                return;
+            }
+            new Thread(() -> {
+                String json = httpGet("http://127.0.0.1:" + ApiServer.DEFAULT_PORT + "/api/incoming", "");
+                final List<String[]> items = parsePending(json);
+                UI.post(() -> {
+                    if (items.isEmpty()) {
+                        pendView.setText("");
+                    } else {
+                        StringBuilder sb = new StringBuilder("待接收：");
+                        for (int i = 0; i < items.size(); i++) {
+                            sb.append(items.get(i)[1]);
+                            if (i < items.size() - 1) sb.append("、");
+                        }
+                        pendView.setText(sb.toString() + "\n（下面第一个的接收/拒绝）");
+                        final String id = items.get(0)[0];
+                        pendView.setOnClickListener(v -> acceptPending(id, true));
+                    }
+                });
+                UI.postDelayed(poll[0], 2000);
+            }).start();
+        };
+        UI.postDelayed(poll[0], 500);
+
         statusRef = new TextView(act);
         statusRef.setTextColor(Color.parseColor("#ffc857"));
         statusRef.setTextSize(12);
@@ -254,6 +296,69 @@ public class ShareDialog {
     }
 
     // ---------------------------------------------------------- 小工具
+
+    private static String httpGet(String url, String tok) {
+        try {
+            HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+            c.setConnectTimeout(6000);
+            c.setReadTimeout(8000);
+            if (tok != null && !tok.isEmpty()) c.setRequestProperty("X-API-Token", tok);
+            if (c.getResponseCode() != 200) return "";
+            StringBuilder sb = new StringBuilder();
+            try (InputStream in = c.getInputStream()) {
+                byte[] buf = new byte[8192];
+                int n;
+                while ((n = in.read(buf)) > 0) sb.append(new String(buf, 0, n, "UTF-8"));
+            }
+            c.disconnect();
+            return sb.toString();
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /** 从 /api/incoming 的 JSON 里抠出 [id, name] 列表（不引第三方库）。 */
+    private static List<String[]> parsePending(String json) {
+        List<String[]> out = new ArrayList<>();
+        if (json == null || json.isEmpty()) return out;
+        int i = 0;
+        while ((i = json.indexOf("\"id\":\"", i)) >= 0) {
+            int s0 = i + 6;
+            int s1 = json.indexOf('"', s0);
+            if (s1 < 0) break;
+            String id = json.substring(s0, s1);
+            int n0 = json.indexOf("\"name\":\"", s1);
+            String name = "";
+            if (n0 >= 0) {
+                int a = n0 + 8;
+                int b = json.indexOf('"', a);
+                if (b > a) name = json.substring(a, b);
+            }
+            out.add(new String[]{id, name});
+            i = s1;
+        }
+        return out;
+    }
+
+    private static void acceptPending(String id, boolean accept) {
+        new Thread(() -> {
+            try {
+                String url = "http://127.0.0.1:" + ApiServer.DEFAULT_PORT + "/api/incoming?id="
+                        + URLEncoder.encode(id, "UTF-8") + "&act=" + (accept ? "accept" : "reject");
+                HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+                c.setRequestMethod("POST");
+                c.setDoOutput(true);
+                c.setConnectTimeout(6000);
+                c.setReadTimeout(30000);
+                c.getOutputStream().close();
+                int code = c.getResponseCode();
+                c.disconnect();
+                say(code == 200 ? (accept ? "已接收" : "已拒绝") : ("操作失败：" + code));
+            } catch (Exception e) {
+                say("失败：" + e.getMessage());
+            }
+        }).start();
+    }
 
     private static SharedPreferences prefs(Context c) {
         return c.getSharedPreferences("xflow_share", Context.MODE_PRIVATE);
