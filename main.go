@@ -250,9 +250,13 @@ func main() {
 			if dir == "" {
 				dir = currentDir()
 			}
-			if strings.HasPrefix(src, "magnet:") || strings.HasSuffix(strings.ToLower(src), ".torrent") {
+			switch {
+			case strings.HasPrefix(src, "magnet:") || strings.HasSuffix(strings.ToLower(src), ".torrent"):
 				mgr.AddBT(src, orDefault(d.Name, "BT 任务"), dir)
-			} else {
+			case IsVideoURL(src):
+				// 视频页（B 站/YouTube…）：交给 yt-dlp，解析+合并它自己搞定
+				mgr.AddVideo(src, d.Name, dir)
+			default:
 				mgr.AddHTTP(src, orDefault(d.Name, fileNameFromURL(src)), dir, d.Segs)
 			}
 			showTrayWindow()

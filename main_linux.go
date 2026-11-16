@@ -221,6 +221,12 @@ func main() {
 			json.NewEncoder(w).Encode(map[string]any{"ok": true, "id": j.ID})
 			return
 		}
+		if IsVideoURL(src) {
+			j := mgr.AddVideo(src, d.Name, dir)
+			ensureWindow()
+			json.NewEncoder(w).Encode(map[string]any{"ok": true, "id": j.ID, "kind": "video"})
+			return
+		}
 		h := map[string]string{}
 		if d.Referer != "" {
 			h["Referer"] = d.Referer
@@ -266,9 +272,12 @@ func main() {
 			return
 		}
 		target := currentDir()
-		if j.Kind == "http" {
+		switch {
+		case j.Kind == "video" || IsVideoURL(j.Source):
+			mgr.AddVideo(j.Source, j.Name, target)
+		case j.Kind == "http":
 			mgr.AddHTTP(j.Source, j.Name, target, j.SegN)
-		} else {
+		default:
 			mgr.AddBT(j.Source, j.Name, target)
 		}
 		json.NewEncoder(w).Encode(map[string]any{"ok": true})
