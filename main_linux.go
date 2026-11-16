@@ -77,6 +77,7 @@ func main() {
 
 	if *dir != "" {
 		os.MkdirAll(*dir, 0755)
+		defaultDirOverride = *dir // 进程内优先，否则多实例会互相踩 .localdl-dir
 		saveDefaultDir(*dir)
 	}
 

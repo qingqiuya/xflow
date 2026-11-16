@@ -101,6 +101,7 @@ button:active{transform:scale(.97)}
     <button class="ghost" id="torrentBtn" title="选一个 .torrent 文件加任务">上传种子文件</button>
     <button class="ghost" id="dir">下载目录</button>
     <button class="ghost" id="clear" title="清掉已完成/失败的历史记录">清空历史</button>
+    <button class="ghost" id="shareBtn" title="在这台和多台设备之间传文件">互传</button>
     <button class="ghost" id="settingsBtn" title="对外接口 / API 用法">调用 API 下载</button>
   </div>
 </div>
@@ -130,6 +131,25 @@ button:active{transform:scale(.97)}
   <div class="dlg-ft"><span class="grow"></span>
     <button class="primary" id="setCancel">关闭</button></div>
 </div></div>
+<div class="mask" id="shareMask" style="display:none"><div class="dlg" style="width:780px">
+  <div class="dlg-hd">互传 · 局域网文件</div>
+  <div class="dlg-path" style="display:flex;gap:8px;align-items:center">
+    <select id="shDev" style="max-width:300px;padding:6px 8px"></select>
+    <span id="shTokWrap" style="display:none;display:flex;gap:6px;align-items:center">
+      <input id="shTok" placeholder="对方令牌" style="width:200px;padding:6px 8px">
+      <button class="mini" id="shTokSave">记住</button>
+    </span>
+  </div>
+  <div class="dlg-q"><span id="shWhere" style="color:var(--dim)"></span></div>
+  <div class="dlg-list" id="shList"></div>
+  <div class="dlg-ft">
+    <button class="ghost" id="shUp">上一级</button>
+    <input type="file" id="shFile" hidden><button class="ghost" id="shPick">上传到这里…</button>
+    <span class="grow"></span>
+    <span id="shMsg" style="color:var(--warn);font-size:12px"></span>
+    <button class="ghost" id="shClose">关闭</button>
+  </div>
+</div></div>
 <div class="list" id="list"><div class="empty"><b>⬇</b>还没有任务</div></div>
 <script>
 const $=s=>document.querySelector(s);
@@ -137,6 +157,91 @@ const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',
 function fs(n){if(!n||isNaN(n)||n<=0)return '—';const u=['B','KB','MB','GB','TB'];let i=0;n=+n;while(n>=1024&&i<u.length-1){n/=1024;i++}return n.toFixed(i?1:0)+u[i]}
 const badge=s=>({downloading:['dl','下载中'],queued:['dl','排队'],paused:['','已暂停'],done:['done','已完成'],error:['err','出错']}[s]||['',s]);
 let dirShown='';
+// ---------- 互传 ----------
+let shPeers=[], shPeer=null, shPath='';
+const shToks=JSON.parse(localStorage.getItem('xflowShareTok')||'{}');
+const shTokOf=ip=>shToks[ip]||'';
+function shSaveTok(ip,t){ if(t){shToks[ip]=t}else{delete shToks[ip]} localStorage.setItem('xflowShareTok',JSON.stringify(shToks)) }
+function shBase(){ return shPeer?('http://'+shPeer.ip+':'+shPeer.port):'' }
+function shURLOK(u){ return shTokOf(shPeer.ip)?(u+(u.includes('?')?'&':'?')+'token='+encodeURIComponent(shTokOf(shPeer.ip))):u }
+async function shJ(u,opt){
+  opt=opt||{};
+  const t=shTokOf(shPeer.ip);
+  opt.headers=Object.assign({},opt.headers||{},t?{'X-API-Token':t}:{});
+  const r=await fetch(u,opt);
+  if(r.status===401){ document.getElementById('shTokWrap').style.display='flex'; throw new Error('对方要令牌') }
+  return r.json();
+}
+async function shOpen(){
+  document.getElementById('shareMask').style.display='flex';
+  const d=await (await fetch('/api/peers')).json();
+  shPeers=(d.peers||[]).filter(p=>p.ip&&p.port);
+  const sel=document.getElementById('shDev');
+  if(!shPeers.length){
+    sel.innerHTML='<option>没发现别的设备</option>';
+    document.getElementById('shList').innerHTML='<div class="empty"><b>📡</b>同一局域网里另开一台 XFlow 就会出现</div>';
+    document.getElementById('shWhere').textContent='';
+    return;
+  }
+  sel.innerHTML=shPeers.map((p,i)=>'<option value="'+i+'">'+esc(p.name||p.ip)+' · '+esc(p.ip)+':'+p.port+'</option>').join('');
+  sel.onchange=()=>{ pickSharePeer(parseInt(sel.value,10)) };
+  pickSharePeer(0);
+}
+function pickSharePeer(i){
+  const p=shPeers[i]; if(!p) return;
+  shPeer={ip:p.ip,port:p.port,name:p.name||p.ip};
+  document.getElementById('shTok').value=shTokOf(shPeer.ip);
+  document.getElementById('shTokWrap').style.display=shTokOf(shPeer.ip)?'none':'flex';
+  document.getElementById('shMsg').textContent='';
+  shBrowse('');
+}
+async function shBrowse(path){
+  if(!shPeer) return;
+  let d;
+  try{ d=await shJ(shBase()+'/api/fs'+(path?('?path='+encodeURIComponent(path)):'')) }
+  catch(e){ document.getElementById('shList').innerHTML='<div class="empty">'+esc(e.message||String(e))+'</div>'; return }
+  if(!d.ok){ document.getElementById('shList').innerHTML='<div class="empty">'+esc(d.err||'打不开')+'</div>'; return }
+  shPath=d.path;
+  document.getElementById('shWhere').textContent=shPeer.name+' 的 '+d.path+'　（收件目录：'+d.dir+'）';
+  const sep=d.path.includes('\\')?'\\':'/';
+  const rows=(d.items||[]).map(it=>{
+    const full=d.path.replace(/[\\/]$/,'')+sep+it.name;
+    if(it.dir) return '<div class="drow" data-dir="'+esc(full)+'"><span class="ico">📁</span><span style="flex:1">'+esc(it.name)+'</span></div>';
+    const dl=shURLOK(shBase()+'/api/download?path='+encodeURIComponent(full));
+    return '<div class="drow"><span class="ico">📄</span><span style="flex:1">'+esc(it.name)+'</span>'+
+      '<span style="color:var(--dim);font-size:12px">'+fs(it.size)+'</span>'+
+      '<a href="'+dl+'" style="color:var(--acc);text-decoration:none;padding:0 6px">下载</a></div>';
+  }).join('');
+  document.getElementById('shList').innerHTML=rows||'<div class="empty">空目录</div>';
+  document.getElementById('shList').querySelectorAll('[data-dir]').forEach(el=>{
+    el.onclick=()=>shBrowse(el.dataset.dir);
+  });
+  document.getElementById('shUp').disabled=!d.parent;
+}
+document.getElementById('shareBtn').onclick=()=>shOpen();
+document.getElementById('shClose').onclick=()=>{ document.getElementById('shareMask').style.display='none' };
+document.getElementById('shUp').onclick=async()=>{
+  const d=await shJ(shBase()+'/api/fs?path='+encodeURIComponent(shPath));
+  if(d.parent) shBrowse(d.parent);
+};
+document.getElementById('shTokSave').onclick=()=>{
+  shSaveTok(shPeer.ip,document.getElementById('shTok').value.trim());
+  document.getElementById('shTokWrap').style.display='none';
+  shBrowse(shPath||'');
+};
+document.getElementById('shPick').onclick=()=>document.getElementById('shFile').click();
+document.getElementById('shFile').onchange=async e=>{
+  const f=e.target.files&&e.target.files[0]; if(!f) return;
+  const msg=document.getElementById('shMsg');
+  msg.textContent='上传中…';
+  const fd=new FormData(); fd.append('file',f);
+  try{
+    const r=await shJ(shBase()+'/api/upload?dir='+encodeURIComponent(shPath),{method:'POST',body:fd});
+    msg.textContent=r.ok?(r.pending?'已发送，等对方接收':'已传到对方 '+r.dir):('失败：'+(r.err||''));
+    if(r.ok) shBrowse(shPath);
+  }catch(err){ msg.textContent='失败：'+(err.message||err) }
+  e.target.value='';
+};
 async function load(){
   const d=await (await fetch('/api/jobs')).json();
   const js=d.jobs||[];
