@@ -55,10 +55,7 @@ ASSETS=$APP/assets
 rm -rf "$ASSETS" && mkdir -p "$ASSETS"
 cp "$LICROOT/LICENSE" "$LICROOT/THIRD_PARTY_LICENSES.md" "$ASSETS/"
 cp -r "$LICROOT/licenses" "$ASSETS/licenses"
-# 自编的 Android ffmpeg（只带 mux/demux，1.5MB）：运行时解压到私有目录再执行
-for f in "$HERE/ffmpeg-arm64" "$LICROOT/android/ffmpeg-arm64"; do
-  if [ -f "$f" ]; then cp "$f" "$ASSETS/ffmpeg-arm64"; break; fi
-done
+
 
 echo "[1/6] 编译资源"
 $BT/aapt2 compile --dir $APP/res -o $OUT/res.zip
@@ -95,6 +92,11 @@ cd $OUT && cp base.apk unsigned.apk && cp dex/classes.dex . && zip -q -j unsigne
 # 不一起打进 apk 的话运行时直接 UnsatisfiedLinkError（BT 引擎起不来）。
 mkdir -p $OUT/lib/arm64-v8a
 cp $OUT/aar/jni/arm64-v8a/libgojni.so $OUT/lib/arm64-v8a/
+# 自编 ffmpeg（只管 mux/demux，1.5MB）。必须放 lib/ 下（.so 才会被安装到
+# nativeLibraryDir），Android 10+ 的 W^X 不允许执行 filesDir 里的二进制。
+for f in "$HERE/ffmpeg-arm64" "$LICROOT/android/ffmpeg-arm64"; do
+  if [ -f "$f" ]; then cp "$f" $OUT/lib/arm64-v8a/libffmpeg.so; break; fi
+done
 LIBCXX=${ANDROID_NDK_HOME:-$HOME/toolchain/android-ndk-r26d}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so
 if [ -f "$LIBCXX" ]; then
   cp "$LIBCXX" $OUT/lib/arm64-v8a/
@@ -103,6 +105,7 @@ else
   exit 1
 fi
 zip -q unsigned.apk lib/arm64-v8a/libgojni.so lib/arm64-v8a/libc++_shared.so
+[ -f lib/arm64-v8a/libffmpeg.so ] && zip -q unsigned.apk lib/arm64-v8a/libffmpeg.so
 
 echo "[6/6] 对齐 + 签名"
 $BT/zipalign -f -p 4 unsigned.apk aligned.apk

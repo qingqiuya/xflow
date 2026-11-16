@@ -132,6 +132,46 @@ public class DownloadService extends Service {
         Job j = new Job(String.valueOf(seq++), url, name);
         j.segN = segN;
 
+        // B 站视频：自己解析 playurl + 双流下载 + ffmpeg 合并
+        if (BiliVideo.isBiliUrl(url)) {
+            j.kind = "video";
+            j.state = "downloading";
+            synchronized (JOBS) {
+                JOBS.add(j);
+            }
+            final Job jj = j;
+            final java.io.File dir = downloadDir();
+            new Thread(() -> BiliVideo.run(getApplicationContext(), jj.url, dir, new BiliVideo.Cb() {
+                @Override
+                public void onTitle(String title) {
+                    if (title != null && !title.isEmpty()) jj.name = title;
+                }
+
+                @Override
+                public void onProgress(long done, long total) {
+                    jj.done = done;
+                    if (total > 0) jj.total = total;
+                }
+
+                @Override
+                public void onState(String st) {
+                    if (st.startsWith("done:")) {
+                        jj.path = st.substring(5);
+                        jj.state = "done";
+                    } else {
+                        jj.state = st;
+                    }
+                }
+
+                @Override
+                public void onError(String msg) {
+                    jj.state = "error";
+                    jj.err = msg;
+                }
+            }), "bili-video").start();
+            return;
+        }
+
         // 磁力 / 种子 == 交给 Go 的 BT 引擎，Java 这边只留个影子任务
         boolean bt = isBtSource(url);
         if (!bt && url.startsWith("/") && new File(url).isFile()) {

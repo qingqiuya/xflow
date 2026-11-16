@@ -495,7 +495,7 @@ public class MainActivity extends Activity {
                     if (!silent) Toast.makeText(this, "查不到更新（" + (er == null ? "网络" : er) + "）", Toast.LENGTH_SHORT).show();
                     return;
                 }
-                if (t.equals(myVer)) {
+                if (!newerThan(t, myVer)) {
                     if (!silent) Toast.makeText(this, "已经是最新版本 v" + myVer, Toast.LENGTH_SHORT).show();
                     return;
                 }
@@ -513,6 +513,26 @@ public class MainActivity extends Activity {
                 showUpdateDialog(myVer, t, h);
             });
         }).start();
+    }
+
+    /** remote 是否真的比 local 新（按点分数字比，别拿字符串相等当判断）。 */
+    private static boolean newerThan(String remote, String local) {
+        String[] a = String.valueOf(remote).split("\\.");
+        String[] b = String.valueOf(local).split("\\.");
+        for (int i = 0; i < Math.max(a.length, b.length); i++) {
+            int x = i < a.length ? num(a[i]) : 0;
+            int y = i < b.length ? num(b[i]) : 0;
+            if (x != y) return x > y;
+        }
+        return false;
+    }
+
+    private static int num(String s) {
+        try {
+            return Integer.parseInt(String.valueOf(s).replaceAll("[^0-9]", ""));
+        } catch (Exception e) {
+            return 0;
+        }
     }
 
     private void showUpdateDialog(String myVer, String t, String h) {
