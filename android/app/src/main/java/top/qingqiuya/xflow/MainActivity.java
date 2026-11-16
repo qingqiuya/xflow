@@ -239,15 +239,17 @@ public class MainActivity extends Activity {
         TextView sub = findViewById(R.id.subText);
         if (sub != null) sub.setOnClickListener(v -> showLicenses());
         TextView verText = findViewById(R.id.verText);
-        String myVer = "";
+        String mv = "";
         try {
-            myVer = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+            mv = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
         } catch (Exception ignored) {
         }
+        final String myVer = mv;
+        // 启动 4 秒后自动查一次更新（静默：只在有新版本时把版本号变成可点的提示）
+        ui.postDelayed(() -> { if (verText != null) checkUpdate(myVer, true); }, 4000);
         if (verText != null) {
             verText.setText("v" + myVer);
-            final String vv = myVer;
-            verText.setOnClickListener(v -> checkUpdate(vv));
+            verText.setOnClickListener(v -> checkUpdate(myVer, false));
         }
 
         Button add = findViewById(R.id.addBtn);
@@ -459,8 +461,8 @@ public class MainActivity extends Activity {
     // 查 GitHub 的 latest release，比较 tag 和本地 versionName。
     // 国内网络可能连不上，失败就静默（点一下没反应比弹错误好）。
 
-    private void checkUpdate(String myVer) {
-        Toast.makeText(this, "检查中…", Toast.LENGTH_SHORT).show();
+    private void checkUpdate(String myVer, boolean silent) {
+        if (!silent) Toast.makeText(this, "检查中…", Toast.LENGTH_SHORT).show();
         new Thread(() -> {
             String tag = null, html = null, err = null;
             try {
@@ -490,15 +492,32 @@ public class MainActivity extends Activity {
             final String t = tag, h = html, er = err;
             ui.post(() -> {
                 if (t == null || t.isEmpty()) {
-                    Toast.makeText(this, "查不到更新（" + (er == null ? "网络" : er) + "）", Toast.LENGTH_SHORT).show();
+                    if (!silent) Toast.makeText(this, "查不到更新（" + (er == null ? "网络" : er) + "）", Toast.LENGTH_SHORT).show();
                     return;
                 }
                 if (t.equals(myVer)) {
-                    Toast.makeText(this, "已经是最新版本 v" + myVer, Toast.LENGTH_SHORT).show();
+                    if (!silent) Toast.makeText(this, "已经是最新版本 v" + myVer, Toast.LENGTH_SHORT).show();
                     return;
                 }
-                new AlertDialog.Builder(this, R.style.DarkDialog)
-                        .setTitle("发现新版本 v" + t)
+                if (silent) {
+                    // 自动检查：不弹框，只把版本号变成「↑ v新版本」，点一下再问
+                    final String tt = t;
+                    TextView vt = findViewById(R.id.verText);
+                    if (vt != null) {
+                        vt.setText("↑ v" + tt);
+                        vt.setTextColor(0xFF4CC2FF);
+                        vt.setOnClickListener(v -> showUpdateDialog(myVer, tt, h));
+                    }
+                    return;
+                }
+                showUpdateDialog(myVer, t, h);
+            });
+        }).start();
+    }
+
+    private void showUpdateDialog(String myVer, String t, String h) {
+        new AlertDialog.Builder(this, R.style.DarkDialog)
+                .setTitle("发现新版本 v" + t)
                         .setMessage("当前 v" + myVer + " → 最新 v" + t + "\n\n要用浏览器打开下载页吗？")
                         .setPositiveButton("去下载", (d, w) -> {
                             try {
@@ -507,10 +526,8 @@ public class MainActivity extends Activity {
                             } catch (Exception ignored) {
                             }
                         })
-                        .setNegativeButton("算了", null)
-                        .show();
-            });
-        }).start();
+                .setNegativeButton("算了", null)
+                .show();
     }
 
     // ---------------------------------------------------------------- 开源许可
