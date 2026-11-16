@@ -90,6 +90,25 @@ public class MainActivity extends Activity {
         // 不加任务不动数据，所以不用等用户点开关
         beacon.start(ApiServer.DEFAULT_PORT);
         paintApiChip(apiChip, apiOn);
+        // 互传开关（跟 API 一样能关）
+        final TextView shareChip = findViewById(R.id.shareChip);
+        boolean shareOn = prefs.getBoolean("share_enabled", true);
+        api.setShareEnabled(shareOn);
+        paintShareChip(shareChip, shareOn);
+        applyShareTab(shareOn);
+        if (shareChip != null) {
+            shareChip.setOnClickListener(v -> {
+                boolean now = !prefs.getBoolean("share_enabled", true);
+                prefs.edit().putBoolean("share_enabled", now).apply();
+                api.setShareEnabled(now);
+                paintShareChip(shareChip, now);
+                applyShareTab(now);
+                Toast.makeText(this, now ? "互传已开启" : "互传已关闭（别人传不进来）",
+                        Toast.LENGTH_SHORT).show();
+                if (!now) animateToPage(0);
+            });
+        }
+
         // 两页：下载 / 互传（点页签或左右滑）
         TextView tabDownload = findViewById(R.id.tabDownload);
         TextView tabShare = findViewById(R.id.tabShare);
@@ -1073,6 +1092,19 @@ public class MainActivity extends Activity {
             }
         }
         return super.dispatchTouchEvent(ev);
+    }
+
+    /** 互传 chip 的开/关配色，跟 API chip 一套。 */
+    private void paintShareChip(TextView chip, boolean on) {
+        if (chip == null) return;
+        chip.setText(on ? "互传开" : "互传");
+        chip.setTextColor(on ? 0xFF3ddc84 : 0xFF5b6478);
+    }
+
+    /** 关掉互传时把互传页签藏起来。 */
+    private void applyShareTab(boolean on) {
+        TextView tab = findViewById(R.id.tabShare);
+        if (tab != null) tab.setVisibility(on ? View.VISIBLE : View.GONE);
     }
 
     private int dp(int v) {

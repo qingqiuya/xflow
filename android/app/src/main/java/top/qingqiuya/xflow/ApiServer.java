@@ -35,6 +35,7 @@ public class ApiServer {
 
     private final Context ctx;
     private volatile String token = "";
+    private volatile boolean shareEnabled = true;   // 互传开关（界面上可以关）
     private ServerSocket server;
     private Thread loop;
     private volatile boolean running;
@@ -70,6 +71,15 @@ public class ApiServer {
 
     public String getToken() {
         return token;
+    }
+
+    /** 互传开关：关掉之后 /api/fs /api/upload 这些一律拒绝。 */
+    public void setShareEnabled(boolean b) {
+        shareEnabled = b;
+    }
+
+    public boolean isShareEnabled() {
+        return shareEnabled;
     }
 
     public synchronized void start(int port) {
@@ -164,6 +174,10 @@ public class ApiServer {
             // 只有「同一局域网（私有地址）」来的互传请求才免令牌。
             // 公网来的（比如以后开了端口映射/DDNS）一律要令牌 —— 清秋 2026-11-16 定。
             boolean lanPeer = isPrivateAddr(sock.getInetAddress());
+            if (sharePath && !shareEnabled) {
+                writeResponse(sock, 403, "{\"ok\":false,\"err\":\"互传已关闭（在这台机器的 XFlow 里打开）\"}");
+                return;
+            }
             if (!token.isEmpty() && !(sharePath && lanPeer)) {
                 String got = headers.getOrDefault("x-api-token", "");
                 if (got.isEmpty()) got = q.getOrDefault("token", "");
