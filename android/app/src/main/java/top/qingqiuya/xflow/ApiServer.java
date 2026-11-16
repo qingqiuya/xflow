@@ -93,21 +93,20 @@ public class ApiServer {
 
     private void handle(Socket s) {
         try (Socket sock = s) {
-            sock.setSoTimeout(8000);
-            BufferedReader in = new BufferedReader(
-                    new InputStreamReader(sock.getInputStream(), StandardCharsets.UTF_8));
-            String reqLine = in.readLine();
+            sock.setSoTimeout(60000);
+            // 从原始字节流读，别用 Reader：上传的是二进制，字符流会把文件搞坏
+            java.io.InputStream raw = sock.getInputStream();
+            String reqLine = readLine(raw);
             if (reqLine == null) return;
             String[] parts = reqLine.split(" ");
             if (parts.length < 2) return;
             String method = parts[0];
             String target = parts[1];
 
-            // 读完 header，拿 Content-Length
             int len = 0;
             Map<String, String> headers = new HashMap<>();
             String line;
-            while ((line = in.readLine()) != null && !line.isEmpty()) {
+            while ((line = readLine(raw)) != null && !line.isEmpty()) {
                 int i = line.indexOf(':');
                 if (i > 0) {
                     String k = line.substring(0, i).trim().toLowerCase();
@@ -120,17 +119,6 @@ public class ApiServer {
                         }
                     }
                 }
-            }
-            String body = "";
-            if (len > 0) {
-                char[] buf = new char[len];
-                int got = 0;
-                while (got < len) {
-                    int n = in.read(buf, got, len - got);
-                    if (n < 0) break;
-                    got += n;
-                }
-                body = new String(buf, 0, got);
             }
 
             String path = target;
@@ -147,8 +135,6 @@ public class ApiServer {
                     }
                 }
             }
-            // POST body 里的 JSON 字段也塞进 q（简单扁平 JSON）
-            if (!body.isEmpty()) parseFlatJSON(body, q);
 
             // 令牌校验：header 或 ?token= 都行（浏览器直接打开方便）
             if (!token.isEmpty()) {
@@ -156,15 +142,90 @@ public class ApiServer {
                 if (got.isEmpty()) got = q.getOrDefault("token", "");
                 if (!token.equals(got)) {
                     Log.w("xflow-api", "拒绝未授权请求 " + path + " from " + sock.getInetAddress());
-                    writeResponse(sock, 401,
-                            "{\"ok\":false,\"err\":\"需要 X-API-Token\"}");
+                    writeResponse(sock, 401, "{\"ok\":false,\"err\":\"需要 X-API-Token\"}");
                     return;
                 }
             }
 
+            // ① 裸 body 上传（桌面端用这套：X-File-Name 头 + 文件字节流）
+            String fname = headers.getOrDefault("x-file-name", "");
+            if (!fname.isEmpty() && "/api/upload".equals(path)) {
+                try {
+                    String saved = Transfer.saveStream(ctx, raw, dec(fname), len);
+                    writeResponse(sock, 200, "{\"ok\":true,\"saved\":[\"" + esc(saved)
+                            + "\"],\"dir\":\"Download/" + Transfer.SUBDIR + "\"}");
+                } catch (Exception e) {
+                    writeResponse(sock, 500, "{\"ok\":false,\"err\":\"" + esc(String.valueOf(e.getMessage())) + "\"}");
+                }
+                return;
+            }
+
+            // ② 下载：直接把文件字节写回去
+            if ("/api/download".equals(path)) {
+                java.io.InputStream fin;
+                try {
+                    fin = Transfer.open(ctx, q.getOrDefault("uri", ""));
+                } catch (Exception e) {
+                    writeResponse(sock, 404, "{\"ok\":false,\"err\":\"" + esc(String.valueOf(e.getMessage())) + "\"}");
+                    return;
+                }
+                writeStream(sock, q.getOrDefault("name", "file"), fin);
+                return;
+            }
+
+            // ③ 其余：body 当 JSON/表单读
+            String body = "";
+            if (len > 0) {
+                byte[] buf = new byte[len];
+                int got = 0;
+                while (got < len) {
+                    int n = raw.read(buf, got, len - got);
+                    if (n < 0) break;
+                    got += n;
+                }
+                body = new String(buf, 0, got, StandardCharsets.UTF_8);
+            }
+            if (!body.isEmpty()) parseFlatJSON(body, q);
+
             String out = route(method, path, q);
+            if (out == null) return;
             writeResponse(sock, 200, out);
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            Log.w("xflow-api", "handle 出错: " + e);
+        }
+    }
+
+    /** 逐字节读一行（header 用），不缓冲、不吃掉二进制。 */
+    private static String readLine(java.io.InputStream in) throws Exception {
+        java.io.ByteArrayOutputStream b = new java.io.ByteArrayOutputStream();
+        int c = -1;
+        while ((c = in.read()) >= 0) {
+            if (c == '\n') break;
+            if (c != '\r') b.write(c);
+            if (b.size() > 8192) break;
+        }
+        if (c < 0 && b.size() == 0) return null;
+        return new String(b.toByteArray(), StandardCharsets.UTF_8);
+    }
+
+    /** 把文件流式写回给调用方（下载用），不占内存。 */
+    private void writeStream(Socket sock, String name, java.io.InputStream fin) throws Exception {
+        java.io.OutputStream os = sock.getOutputStream();
+        String head = "HTTP/1.1 200 OK\r\n" +
+                "Content-Type: application/octet-stream\r\n" +
+                "Content-Disposition: attachment; filename=\"" + name.replace("\"", "") + "\"\r\n" +
+                "Connection: close\r\n\r\n";
+        os.write(head.getBytes(StandardCharsets.UTF_8));
+        byte[] buf = new byte[64 * 1024];
+        int n;
+        try {
+            while ((n = fin.read(buf)) > 0) os.write(buf, 0, n);
+            os.flush();
+        } finally {
+            try {
+                fin.close();
+            } catch (Exception ignored) {
+            }
         }
     }
 
@@ -182,6 +243,22 @@ public class ApiServer {
     }
 
     private String route(String method, String path, Map<String, String> q) {
+        if (path.equals("/api/share")) {
+            // 互传：告诉对方收到的文件放哪、我这边的收件目录叫啥
+            return "{\"ok\":true,\"platform\":\"android\",\"dir\":\"Download/" + Transfer.SUBDIR
+                    + "\",\"autoAccept\":true}";
+        }
+        if (path.equals("/api/files")) {
+            List<Transfer.Item> items = Transfer.list(ctx);
+            StringBuilder sb = new StringBuilder("{\"ok\":true,\"dir\":\"Download/" + Transfer.SUBDIR + "\",\"items\":[");
+            for (int i = 0; i < items.size(); i++) {
+                if (i > 0) sb.append(',');
+                Transfer.Item it = items.get(i);
+                sb.append("{\"name\":\"").append(esc(it.name)).append("\",\"size\":").append(it.size)
+                        .append(",\"uri\":\"").append(esc(it.uri)).append("\"}");
+            }
+            return sb.append("]}").toString();
+        }
         if (path.equals("/api/version")) {
             String v = "";
             try {
