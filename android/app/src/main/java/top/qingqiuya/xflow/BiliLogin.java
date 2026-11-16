@@ -138,6 +138,41 @@ public class BiliLogin {
             st.setUserAgentString(UA);
             CookieManager.getInstance().setAcceptCookie(true);
             CookieManager.getInstance().setAcceptThirdPartyCookies(web, true);
+            // 扒掉 B 站那层皮：顶部导航、页脚、页面装饰全藏掉，
+            // 背景换成 App 的深色，只留中间的登录卡片——看着像咱们自己的页面。
+            final String peel = "(function(){try{"
+                    + "var css='#biliMainHeader,#biliMainFooter{display:none!important}'"
+                    + "+'html,body{background:#12151c!important}'"
+                    + "+'body *{color:#cfd6e4!important}'"
+                    + "+'div{background-color:transparent!important}'"
+                    + "+'#passport-app{min-height:100vh!important;padding-top:8px!important}'"
+                    + "+'input{background:#0f1420!important;color:#e8ebf2!important;"
+                    + "border:1px solid #2a3244!important;border-radius:8px!important}'"
+                    + "+'button{background:#4CC2FF!important;color:#0b0f17!important;"
+                    + "border-radius:8px!important}'"
+                    + "+'img[src*=\"2233\"],img[src*=\"logo\"],img[alt*=\"bilibili\"]"
+                    + "{display:none!important}';"
+                    + "var s=document.createElement('style');s.textContent=css;"
+                    + "(document.head||document.documentElement).appendChild(s);"
+                    // 顶部那块 B 站插画是 background-image 的元素，不是 img，
+                    // 按「有背景图 + 宽度够 + 高度在 120~600 之间」认出来藏掉
+                    + "setTimeout(function(){try{"
+                    + "document.querySelectorAll('#passport-app *').forEach(function(el){"
+                    + "var st=getComputedStyle(el);var bi=st.backgroundImage||'';"
+                    + "var w=el.offsetWidth||0,h=el.offsetHeight||0;"
+                    + "if(bi.indexOf('url(')>=0 && w>300 && h>120 && h<600){el.style.display='none';}"
+                    + "});}catch(e){}},1200);"
+                    + "}catch(e){}})();";
+
+            web.setWebViewClient(new android.webkit.WebViewClient() {
+                @Override
+                public void onPageFinished(WebView v, String url) {
+                    try {
+                        v.evaluateJavascript(peel, null);
+                    } catch (Throwable ignored) {
+                    }
+                }
+            });
             web.loadUrl("https://passport.bilibili.com/login");
         };
 
