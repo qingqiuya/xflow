@@ -29,7 +29,8 @@ import (
 
 const biliUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
-var reBV = regexp.MustCompile(`(BV[0-9A-Za-z]{10})`)
+// 大小写都认（小写 bv 号也常见：手机上复制出来常被自动小写）；前缀统一还原成 BV
+var reBV = regexp.MustCompile(`(?i)(bv[0-9A-Za-z]{10})`)
 
 func biliClient(timeout time.Duration) *http.Client {
 	return &http.Client{
@@ -86,7 +87,7 @@ func IsBiliURL(src string) bool {
 // resolveBvid 从各种 B 站链接里抠出 BV 号（b23.tv 短链先跟一次跳转）。
 func resolveBvid(src string) string {
 	if m := reBV.FindString(src); m != "" {
-		return m
+		return "BV" + m[2:]
 	}
 	if strings.Contains(strings.ToLower(src), "b23.tv/") {
 		req, err := http.NewRequest("GET", src, nil)
@@ -102,7 +103,7 @@ func resolveBvid(src string) string {
 		}
 		defer resp.Body.Close()
 		if m := reBV.FindString(resp.Header.Get("Location")); m != "" {
-			return m
+			return "BV" + m[2:]
 		}
 	}
 	return ""
