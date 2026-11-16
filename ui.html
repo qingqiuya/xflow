@@ -133,6 +133,10 @@ button:active{transform:scale(.97)}
 .cliprow{display:flex;gap:7px;align-items:center;margin-top:4px}
 .cliprow input{flex:1;padding:8px 11px;font-size:12.5px;background:#0f1420;border:1px solid var(--line);border-radius:8px;color:var(--fg);outline:none}
 .cliprow input:focus{border-color:var(--acc)}
+.pbar{height:5px;border-radius:99px;background:#1e2634;margin:12px auto 0;max-width:420px;overflow:hidden;display:none}
+.pbar.on{display:block}
+.pbar i{display:block;height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,#5cc9ff,#3ddc84);transition:width .12s}
+.drop-foot{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:8px;min-height:18px;font-size:11.5px;color:#6b7488}
 .msgline{font-size:12px;color:var(--warn);margin-top:9px;min-height:16px}
 .sw{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--dim);cursor:pointer;font-weight:400}
 .sw input{display:none}
@@ -211,6 +215,7 @@ button:active{transform:scale(.97)}
     <div class="sec-hd">设备<span class="sec-tip" id="devTip"></span>
       <span class="grow" style="flex:1"></span>
       <label class="sw" title="互传总开关：关掉后别人传不进来"><input type="checkbox" id="shareChip"><i></i>接收</label>
+      <button class="tiny" id="shDirBtn">发文件夹</button>
       <button class="tiny" id="shAddrToggle">+ 手动加</button>
     </div>
     <div class="devgrid" id="devGrid"></div>
@@ -226,9 +231,11 @@ button:active{transform:scale(.97)}
 
   <!-- 发送 -->
   <label class="drop" id="dropZone" for="shFile">
-    <div class="drop-ico">↑</div>
-    <div class="drop-t">点这里选文件，或拖进来</div>
+    <div class="drop-ico" id="dropIco">↑</div>
+    <div class="drop-t" id="dropTitle">点这里选文件，或拖进来</div>
     <div class="drop-s" id="dropTo">先选上面一台设备</div>
+    <div class="pbar" id="pbar"><i id="pfill"></i></div>
+    <div class="drop-foot"><span id="pinfo"></span><button class="tiny" id="sendCancel" style="display:none">取消</button></div>
   </label>
 
   <!-- 收件箱 -->
@@ -249,6 +256,7 @@ button:active{transform:scale(.97)}
   </div>
   <div class="msgline" id="shMsg"></div>
   <input type="file" id="shFile" multiple style="position:fixed;left:-3000px;width:1px;height:1px;opacity:0">
+  <input type="file" id="shDir" webkitdirectory directory multiple style="position:fixed;left:-3000px;width:1px;height:1px;opacity:0">
   <div style="display:none">
     <span id="shWhere"></span><div id="shList"></div>
     <button id="shPick"></button><button id="shClose"></button>
@@ -449,45 +457,138 @@ document.getElementById('shTokSave').onclick=()=>{
   shBrowse(shPath||'');
 };
 document.getElementById('shPick').onclick=()=>document.getElementById('shFile').click();
+
+let curXhr = null, curFiles = [], curSent = 0, curTotal = 0, sending = false;
+
+function shProgress(done, total, label){
+  const bar=document.getElementById('pbar'), fill=document.getElementById('pfill'), info=document.getElementById('pinfo');
+  if(!bar) return;
+  if(total>0){ bar.classList.add('on'); fill.style.width=Math.min(100, done/total*100)+'%' }
+  if(info) info.textContent = label || '';
+}
+
+function uploadOne(file, relPath){
+  return new Promise((resolve,reject)=>{
+    const xhr=new XMLHttpRequest(); curXhr=xhr;
+    xhr.open('POST', shBase()+'/api/upload');
+    const t=shTokOf(shPeer.ip);
+    if(t) xhr.setRequestHeader('X-API-Token', t);
+    // header 只能是 ASCII，中文路径先 encode，后端 url.PathUnescape 解
+    xhr.setRequestHeader('X-Enc', '1');
+    xhr.setRequestHeader('X-File-Name', encodeURIComponent(file.name));
+    if(relPath) xhr.setRequestHeader('X-File-Path', encodeURIComponent(relPath));
+    const base=curSent;
+    xhr.upload.onprogress=e=>{
+      if(!e.lengthComputable) return;
+      const done=base+e.loaded;
+      shProgress(done, curTotal, ((done/curTotal)*100).toFixed(0)+'% · '+(done/1048576).toFixed(1)+'/'+(curTotal/1048576).toFixed(1)+' MB');
+    };
+    xhr.onload=()=>{
+      let d=null; try{ d=JSON.parse(xhr.responseText) }catch(err){}
+      if(d && d.ok) resolve(d); else reject(new Error((d&&d.err)||('HTTP '+xhr.status)));
+    };
+    xhr.onerror=()=>reject(new Error('网络断了'));
+    xhr.onabort=()=>reject(new Error('已取消'));
+    xhr.send(file);
+  });
+}
+
+// 拖进来的可能是文件夹：递归把里面所有文件摊平，保留相对路径
+function readEntry(entry, prefix, out){
+  return new Promise(resolve=>{
+    if(!entry) return resolve();
+    if(entry.isFile){
+      entry.file(f=>{ out.push({file:f, path:prefix+f.name}); resolve() }, ()=>resolve());
+      return;
+    }
+    if(!entry.isDirectory) return resolve();
+    const reader=entry.createReader();
+    const step=()=>{
+      reader.readEntries(async batch=>{
+        if(!batch.length) return resolve();
+        for(const en of batch) await readEntry(en, prefix+entry.name+'/', out);
+        step();
+      }, ()=>resolve());
+    };
+    step();
+  });
+}
+
+async function shSendFiles(files, paths){
+  const msg=document.getElementById('shMsg');
+  if(!shPeer){ alert('先选一台设备'); return }
+  if(sending){ alert('正在发，等这批发完'); return }
+  const list=(files||[]).map((f,i)=>({file:f, path:(paths&&paths[i])||f.name}));
+  if(!list.length) return;
+  sending=true;
+  const cancelBtn=document.getElementById('sendCancel');
+  if(cancelBtn) cancelBtn.style.display='inline-block';
+  curTotal=list.reduce((a,x)=>a+x.file.size,0); curSent=0;
+  let okN=0, lastErr='';
+  const title=document.getElementById('dropTitle');
+  try{
+    for(let i=0;i<list.length;i++){
+      const it=list[i];
+      if(title) title.textContent='发送中 '+(i+1)+'/'+list.length+'：'+it.file.name;
+      if(msg) msg.textContent='';
+      await uploadOne(it.file, it.path).then(()=>okN++).catch(e=>{ lastErr=e.message||String(e); throw e });
+      curSent+=it.file.size;
+    }
+    shProgress(curTotal, curTotal, '100%');
+    if(msg) msg.textContent='已发送 '+okN+' 个文件到 '+shPeer.name;
+    if(title) title.textContent='点这里选文件，或拖进来';
+    if(okN) shLoadInbox();
+  }catch(err){
+    if(msg) msg.textContent='发了 '+okN+'/'+list.length+' 个，失败：'+(err.message||err);
+    if(title) title.textContent='点这里选文件，或拖进来';
+  }finally{
+    sending=false; curXhr=null;
+    if(cancelBtn) cancelBtn.style.display='none';
+    setTimeout(()=>{ const b=document.getElementById('pbar'); if(b) b.classList.remove('on') }, 2500);
+  }
+}
+
+document.getElementById('shDirBtn').onclick=()=>{
+  if(!shPeer){ alert('先选一台设备'); return }
+  document.getElementById('shDir').click();
+};
 (function(){
-  const dz=document.getElementById('dropZone'), fi=document.getElementById('shFile');
+  const dz=document.getElementById('dropZone'), fi=document.getElementById('shFile'), di=document.getElementById('shDir');
+  const cancel=document.getElementById('sendCancel');
+  if(cancel) cancel.onclick=e=>{ e.preventDefault(); e.stopPropagation(); if(curXhr){ try{ curXhr.abort() }catch(err){} } };
   if(!dz||!fi) return;
   dz.addEventListener('click',e=>{
-    if(!shPeer){ e.preventDefault(); e.stopPropagation(); alert('先选一台设备'); return }
-  });
-  // 没有 label for 的兜底（老版本 WebView2）
-  dz.addEventListener('click',e=>{
-    if(shPeer && !e.target.closest('input')) { /* label for 已处理 */ }
+    if(!shPeer){ e.preventDefault(); e.stopPropagation(); alert('先选一台设备') }
   });
   ['dragenter','dragover'].forEach(t=>dz.addEventListener(t,e=>{e.preventDefault();dz.classList.add('hot')}));
   ['dragleave','drop'].forEach(t=>dz.addEventListener(t,e=>{e.preventDefault();dz.classList.remove('hot')}));
-  dz.addEventListener('drop',e=>{
+  dz.addEventListener('drop',async e=>{
     if(!shPeer){ alert('先选一台设备'); return }
+    const items=Array.from((e.dataTransfer&&e.dataTransfer.items)||[]);
+    const entries=items.map(it=>it.webkitGetAsEntry?it.webkitGetAsEntry():null).filter(Boolean);
+    if(entries.length){
+      const out=[]; 
+      for(const en of entries) await readEntry(en,'',out);
+      if(out.length) shSendFiles(out.map(x=>x.file), out.map(x=>x.path));
+      return;
+    }
     const files=Array.from((e.dataTransfer&&e.dataTransfer.files)||[]);
-    if(files.length) shSendFiles(files);
+    if(files.length) shSendFiles(files, files.map(f=>f.webkitRelativePath||f.name));
   });
 })();
-async function shSendFiles(files){
-  const msg=document.getElementById('shMsg');
-  let okN=0, lastErr='';
-  for(let i=0;i<files.length;i++){
-    msg.textContent='发送中 '+(i+1)+'/'+files.length+'：'+files[i].name;
-    const fd=new FormData(); fd.append('file',files[i]);
-    try{
-      const r=await shJ(shBase()+'/api/upload',{method:'POST',body:fd});
-      if(r.ok) okN++; else lastErr=r.err||'';
-    }catch(err){ lastErr=err.message||String(err) }
-  }
-  msg.textContent = okN===files.length
-    ? ('已发送 '+okN+' 个文件到 '+shPeer.name+' 的收件目录')
-    : ('发了 '+okN+'/'+files.length+' 个'+(lastErr?('，最后一个失败：'+lastErr):''));
-  if(okN) shLoadInbox();
-}
-document.getElementById('shFile').onchange=e=>{
+
+fi.onchange=e=>{
   const files=Array.from(e.target.files||[]);
   e.target.value='';
-  if(files.length) shSendFiles(files);
+  if(files.length) shSendFiles(files, files.map(f=>f.name));
 };
+const _sd=document.getElementById('shDir');
+if(_sd) _sd.onchange=e=>{
+  const files=Array.from(e.target.files||[]);
+  e.target.value='';
+  if(files.length) shSendFiles(files, files.map(f=>f.webkitRelativePath||f.name));
+};
+
 // 剪贴板 / 文本：本机浏览器剪贴板 ↔ 对方
 function shMsgShow(t){ document.getElementById('shMsg').textContent = t; }
 async function shSendText(t){

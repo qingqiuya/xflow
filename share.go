@@ -22,6 +22,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -212,12 +213,33 @@ func registerShare(mux *http.ServeMux) {
 		// 两种口味：
 		//   ① multipart/form-data（桌面 → 桌面，字段名 file）
 		//   ② 裸 body + X-File-Name 头（手机端用这个 —— 它那套手写 HTTP 处理不了 multipart）
-		if nm := r.Header.Get("X-File-Name"); nm != "" {
+		encHdr := r.Header.Get("X-Enc") == "1"
+		nmHdr := r.Header.Get("X-File-Name")
+		if encHdr && nmHdr != "" {
+			if dec, derr := url.PathUnescape(nmHdr); derr == nil {
+				nmHdr = dec
+			}
+		}
+		if nm := nmHdr; nm != "" {
 			dir := r.URL.Query().Get("dir")
 			if dir == "" || !underAllowed(dir) {
 				dir = shareRecvDir()
 			}
 			os.MkdirAll(dir, 0o755)
+			// 拖进来的文件夹：前端带 X-File-Path（相对路径，如 "合集/图/1.png"），
+			// 在这里还原目录层级；不合法就退化成只取文件名。
+			if rel := r.Header.Get("X-File-Path"); rel != "" {
+				if encHdr {
+					if dec, derr := url.PathUnescape(rel); derr == nil {
+						rel = dec
+					}
+				}
+				if pd, err := safeRelDir(dir, rel); err == nil && pd != "" {
+					os.MkdirAll(pd, 0o755)
+					dir = pd
+					nm = filepath.Base(rel)
+				}
+			}
 			if !shareAutoVal() {
 				// 手动同意：先落临时区，等用户点「接收」
 				tmp := filepath.Join(os.TempDir(), "xflow-in-"+shareToken(6))
@@ -486,4 +508,39 @@ func copyFileTo(src, dst string) error {
 	defer out.Close()
 	_, err = io.Copy(out, in)
 	return err
+}
+
+// safeRelDir 把前端给的相对路径（可能带子目录）落成 base 下的真实目录。
+// 只允许相对路径：绝对路径、盘符、.. 全部拒绝。返回 "base/子目录"。
+func safeRelDir(base, rel string) (string, error) {
+	rel = strings.TrimSpace(strings.ReplaceAll(rel, "\\", "/"))
+	if rel == "" {
+		return "", fmt.Errorf("空路径")
+	}
+	if strings.HasPrefix(rel, "/") || strings.Contains(rel, ":") {
+		return "", fmt.Errorf("不接受绝对路径")
+	}
+	parts := []string{}
+	for _, seg := range strings.Split(rel, "/") {
+		seg = strings.TrimSpace(seg)
+		if seg == "" || seg == "." || seg == ".." {
+			continue
+		}
+		parts = append(parts, seg)
+	}
+	if len(parts) == 0 {
+		return "", fmt.Errorf("空路径")
+	}
+	// 最后一段是文件名，去掉
+	if len(parts) > 1 {
+		parts = parts[:len(parts)-1]
+	} else {
+		return base, nil
+	}
+	out := filepath.Join(append([]string{base}, parts...)...)
+	// 二次校验：必须在 base 之内
+	if rp, err := filepath.Rel(base, out); err != nil || strings.HasPrefix(rp, "..") {
+		return "", fmt.Errorf("路径越界")
+	}
+	return out, nil
 }
