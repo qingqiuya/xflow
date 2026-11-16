@@ -58,6 +58,18 @@
             android:layout_marginEnd="7dp" />
 
         <TextView
+            android:id="@+id/biliChip"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="B站"
+            android:textColor="#5b6478"
+            android:textSize="11sp"
+            android:background="@drawable/chip_bg"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="4dp"
+            android:layout_marginEnd="7dp" />
+
+        <TextView
             android:id="@+id/apiChip"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

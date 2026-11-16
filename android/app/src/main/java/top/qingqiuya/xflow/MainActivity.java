@@ -252,6 +252,13 @@ public class MainActivity extends Activity {
             verText.setOnClickListener(v -> checkUpdate(myVer, false));
         }
 
+        // B 站登录小圆片：登录后变「B站✓」，点它换号/退出
+        TextView biliChip = findViewById(R.id.biliChip);
+        if (biliChip != null) {
+            refreshBiliChip(biliChip);
+            biliChip.setOnClickListener(v -> BiliLogin.showLogin(this, () -> refreshBiliChip(biliChip)));
+        }
+
         Button add = findViewById(R.id.addBtn);
         Button torrentBtn = findViewById(R.id.torrentBtn);
         torrentBtn.setOnClickListener(v -> pickTorrent());
@@ -460,6 +467,17 @@ public class MainActivity extends Activity {
     //
     // 查 GitHub 的 latest release，比较 tag 和本地 versionName。
     // 国内网络可能连不上，失败就静默（点一下没反应比弹错误好）。
+
+    private void refreshBiliChip(TextView chip) {
+        if (chip == null) return;
+        if (BiliLogin.loggedIn(this)) {
+            chip.setText("B站✓");
+            chip.setTextColor(0xFF4CD964);
+        } else {
+            chip.setText("B站登录");
+            chip.setTextColor(0xFF5b6478);
+        }
+    }
 
     private void checkUpdate(String myVer, boolean silent) {
         if (!silent) Toast.makeText(this, "检查中…", Toast.LENGTH_SHORT).show();

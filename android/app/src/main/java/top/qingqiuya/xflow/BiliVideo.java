@@ -47,6 +47,9 @@ public class BiliVideo {
     private static final String REFER = "https://www.bilibili.com/";
     private static final String TAG = "xflow-bili";
 
+    /** 当前任务用的 Cookie 头（登录后带 SESSDATA，能拿 720P/1080P）。 */
+    static volatile String COOKIE = null;
+
     public static boolean isBiliUrl(String s) {
         if (s == null) return false;
         String low = s.trim().toLowerCase();
@@ -57,6 +60,7 @@ public class BiliVideo {
 
     public static void run(Context ctx, String url, File dir, Cb cb) {
         try {
+            COOKIE = BiliLogin.cookieHeader(ctx);
             String bvid = resolveBvid(url);
             if (bvid == null || bvid.isEmpty()) {
                 cb.onError("认不出 BV 号");
@@ -81,8 +85,10 @@ public class BiliVideo {
             }
             cb.onTitle(title);
 
+            // 没登录只能拿 480P（qn=32），登录后请求 1080P（qn=112）
+            int qn = (COOKIE != null && !COOKIE.isEmpty()) ? 112 : 32;
             String pu = "https://api.bilibili.com/x/player/playurl?bvid=" + bvid
-                    + "&cid=" + cid + "&qn=112&fnval=16&fourk=1";
+                    + "&cid=" + cid + "&qn=" + qn + "&fnval=16&fourk=1";
             JSONObject play = new JSONObject(getJson(pu));
             if (play.optInt("code", -1) != 0) {
                 cb.onError("playurl 返回 " + play.optInt("code") + "：" + play.optString("message"));
@@ -184,10 +190,38 @@ public class BiliVideo {
         return m.find() ? m.group(1) : "";
     }
 
-    private static String getJson(String url) throws Exception {
+    private static void setHeaders(HttpURLConnection c) {
+        c.setRequestProperty("User-Agent", UA);
+        c.setRequestProperty("Referer", REFER);
+        String ck = COOKIE;
+        if (ck != null && !ck.isEmpty()) c.setRequestProperty("Cookie", ck);
+    }
+
+    /** 给 BiliLogin 用的 GET（返回 body 文本）。 */
+    static String httpGet(String url, String cookie) throws Exception {
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
         c.setRequestProperty("User-Agent", UA);
         c.setRequestProperty("Referer", REFER);
+        if (cookie != null && !cookie.isEmpty()) c.setRequestProperty("Cookie", cookie);
+        c.setConnectTimeout(12000);
+        c.setReadTimeout(15000);
+        if (c.getResponseCode() != 200) {
+            int code = c.getResponseCode();
+            c.disconnect();
+            throw new Exception("HTTP " + code);
+        }
+        StringBuilder sb = new StringBuilder();
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(c.getInputStream(), "UTF-8"))) {
+            String line;
+            while ((line = br.readLine()) != null) sb.append(line);
+        }
+        c.disconnect();
+        return sb.toString();
+    }
+
+    private static String getJson(String url) throws Exception {
+        HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+        setHeaders(c);
         c.setConnectTimeout(12000);
         c.setReadTimeout(15000);
         if (c.getResponseCode() != 200) {
@@ -273,8 +307,7 @@ public class BiliVideo {
                 long start = System.currentTimeMillis();
                 try {
                     HttpURLConnection c = (HttpURLConnection) new URL(u).openConnection();
-                    c.setRequestProperty("User-Agent", UA);
-                    c.setRequestProperty("Referer", REFER);
+                    setHeaders(c);
                     c.setRequestProperty("Range", "bytes=0-1");
                     c.setConnectTimeout(6000);
                     c.setReadTimeout(6000);
@@ -308,8 +341,7 @@ public class BiliVideo {
     private static long contentLength(String url) {
         try {
             HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
-            c.setRequestProperty("User-Agent", UA);
-            c.setRequestProperty("Referer", REFER);
+            setHeaders(c);
             c.setRequestProperty("Range", "bytes=0-0");
             c.setConnectTimeout(8000);
             c.setReadTimeout(8000);
@@ -335,8 +367,7 @@ public class BiliVideo {
 
     private static void download(String url, File dst, long[] prog, Cb cb) throws Exception {
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
-        c.setRequestProperty("User-Agent", UA);
-        c.setRequestProperty("Referer", REFER);
+        setHeaders(c);
         c.setConnectTimeout(15000);
         c.setReadTimeout(30000);
         int code = c.getResponseCode();

@@ -69,12 +69,17 @@ $BT/aapt2 link -o $OUT/base.apk -I "$PLATFORM" \
 echo "[2.5/6] 解 AAR（BT 引擎）"
 rm -rf "$OUT/aar" && mkdir -p "$OUT/aar" && (cd "$OUT/aar" && unzip -q "$AAR")
 JAR=$OUT/aar/classes.jar
+# QR 码生成（B 站扫码登录）：zxing core，纯 Java，跟 AAR 一样进 classpath 和 dex
+ZJAR=""
+for f in "$HERE/zxing-core.jar" "$LICROOT/android/zxing-core.jar"; do
+  if [ -f "$f" ]; then ZJAR=$f; break; fi
+done
 
 echo "[3/6] javac"
 # 别把编译错误吞掉：以前是 `javac ... | grep -v 警告 || true`，
 # 没开 pipefail 时 javac 失败也返回 0，产物是旧的 dex 也照样签名出去。
 JAVAC_LOG=$OUT/javac.log
-if ! javac -source 11 -target 11 -encoding UTF-8 -classpath "$PLATFORM:$JAR" -d "$OUT/classes" \
+if ! javac -source 11 -target 11 -encoding UTF-8 -classpath "$PLATFORM:$JAR${ZJAR:+:$ZJAR}" -d "$OUT/classes" \
      "$OUT/gen/top/qingqiuya/xflow/R.java" "$APP"/java/top/qingqiuya/xflow/*.java > "$JAVAC_LOG" 2>&1; then
   echo "javac 编译失败：" >&2
   cat "$JAVAC_LOG" >&2
@@ -83,7 +88,7 @@ fi
 grep -v "^警告" "$JAVAC_LOG" || true
 
 echo "[4/6] d8 -> dex"
-$BT/d8 --lib "$PLATFORM" --min-api 24 --output $OUT/dex $(find $OUT/classes -name "*.class") "$JAR"
+$BT/d8 --lib "$PLATFORM" --min-api 24 --output $OUT/dex $(find $OUT/classes -name "*.class") "$JAR" ${ZJAR:+"$ZJAR"}
 
 echo "[5/6] 打包 apk"
 cd $OUT && cp base.apk unsigned.apk && cp dex/classes.dex . && zip -q -j unsigned.apk classes.dex
