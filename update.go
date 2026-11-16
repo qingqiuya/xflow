@@ -83,7 +83,8 @@ func checkUpdate() updateInfo {
 	}
 	latest := strings.TrimPrefix(strings.TrimSpace(rel.TagName), "v")
 	info.Latest = latest
-	if latest != "" && versionNewer(latest, Version) {
+	// 本地是开发版（没打版本号）就别提示更新了——dev 永远"最旧"，会一直误报
+	if latest != "" && Version != "" && Version != "dev" && versionNewer(latest, Version) {
 		info.HasUpdate = true
 		info.URL = rel.HTMLURL
 		if info.URL == "" {
