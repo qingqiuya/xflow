@@ -55,6 +55,10 @@ ASSETS=$APP/assets
 rm -rf "$ASSETS" && mkdir -p "$ASSETS"
 cp "$LICROOT/LICENSE" "$LICROOT/THIRD_PARTY_LICENSES.md" "$ASSETS/"
 cp -r "$LICROOT/licenses" "$ASSETS/licenses"
+# 自编的 Android ffmpeg（只带 mux/demux，1.5MB）：运行时解压到私有目录再执行
+for f in "$HERE/ffmpeg-arm64" "$LICROOT/android/ffmpeg-arm64"; do
+  if [ -f "$f" ]; then cp "$f" "$ASSETS/ffmpeg-arm64"; break; fi
+done
 
 echo "[1/6] 编译资源"
 $BT/aapt2 compile --dir $APP/res -o $OUT/res.zip
