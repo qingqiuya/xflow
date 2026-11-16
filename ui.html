@@ -137,6 +137,9 @@ button:active{transform:scale(.97)}
 .pbar.on{display:block}
 .pbar i{display:block;height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,#5cc9ff,#3ddc84);transition:width .12s}
 .drop-foot{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:8px;min-height:18px;font-size:11.5px;color:#6b7488}
+.pickmenu{display:none;gap:8px;justify-content:center;margin-top:12px}
+.pickmenu.on{display:flex}
+.drop.picking{border-color:var(--acc);background:rgba(76,194,255,.08)}
 .msgline{font-size:12px;color:var(--warn);margin-top:9px;min-height:16px}
 .sw{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--dim);cursor:pointer;font-weight:400}
 .sw input{display:none}
@@ -215,7 +218,6 @@ button:active{transform:scale(.97)}
     <div class="sec-hd">设备<span class="sec-tip" id="devTip"></span>
       <span class="grow" style="flex:1"></span>
       <label class="sw" title="互传总开关：关掉后别人传不进来"><input type="checkbox" id="shareChip"><i></i>接收</label>
-      <button class="tiny" id="shDirBtn">发文件夹</button>
       <button class="tiny" id="shAddrToggle">+ 手动加</button>
     </div>
     <div class="devgrid" id="devGrid"></div>
@@ -230,13 +232,17 @@ button:active{transform:scale(.97)}
   </div>
 
   <!-- 发送 -->
-  <label class="drop" id="dropZone" for="shFile">
+  <div class="drop" id="dropZone">
     <div class="drop-ico" id="dropIco">↑</div>
     <div class="drop-t" id="dropTitle">点这里选文件，或拖进来</div>
     <div class="drop-s" id="dropTo">先选上面一台设备</div>
     <div class="pbar" id="pbar"><i id="pfill"></i></div>
     <div class="drop-foot"><span id="pinfo"></span><button class="tiny" id="sendCancel" style="display:none">取消</button></div>
-  </label>
+    <div class="pickmenu" id="pickMenu">
+      <button class="tiny" id="pickFile">选择文件</button>
+      <button class="tiny" id="pickDir">选择文件夹</button>
+    </div>
+  </div>
 
   <!-- 收件箱 -->
   <div class="sec">
@@ -548,17 +554,32 @@ async function shSendFiles(files, paths){
   }
 }
 
-document.getElementById('shDirBtn').onclick=()=>{
-  if(!shPeer){ alert('先选一台设备'); return }
-  document.getElementById('shDir').click();
+document.getElementById('pickFile').onclick=e=>{
+  e.stopPropagation();
+  hidePick(); document.getElementById('shFile').click();
 };
+document.getElementById('pickDir').onclick=e=>{
+  e.stopPropagation();
+  hidePick(); document.getElementById('shDir').click();
+};
+function showPick(){ const m=document.getElementById('pickMenu'), d=document.getElementById('dropZone'); if(m){m.classList.add('on')} if(d){d.classList.add('picking')} }
+function hidePick(){ const m=document.getElementById('pickMenu'), d=document.getElementById('dropZone'); if(m){m.classList.remove('on')} if(d){d.classList.remove('picking')} }
+document.addEventListener('click',e=>{
+  const d=document.getElementById('dropZone');
+  if(d && !d.contains(e.target)) hidePick();
+});
 (function(){
   const dz=document.getElementById('dropZone'), fi=document.getElementById('shFile'), di=document.getElementById('shDir');
   const cancel=document.getElementById('sendCancel');
   if(cancel) cancel.onclick=e=>{ e.preventDefault(); e.stopPropagation(); if(curXhr){ try{ curXhr.abort() }catch(err){} } };
   if(!dz||!fi) return;
   dz.addEventListener('click',e=>{
-    if(!shPeer){ e.preventDefault(); e.stopPropagation(); alert('先选一台设备') }
+    if(!shPeer){ e.preventDefault(); e.stopPropagation(); alert('先选一台设备'); return }
+    // 点在进度/取消/选择项上不重复弹
+    if(e.target.closest('button')) return;
+    if(sending) return;
+    const m=document.getElementById('pickMenu');
+    if(m && m.classList.contains('on')) hidePick(); else showPick();
   });
   ['dragenter','dragover'].forEach(t=>dz.addEventListener(t,e=>{e.preventDefault();dz.classList.add('hot')}));
   ['dragleave','drop'].forEach(t=>dz.addEventListener(t,e=>{e.preventDefault();dz.classList.remove('hot')}));
