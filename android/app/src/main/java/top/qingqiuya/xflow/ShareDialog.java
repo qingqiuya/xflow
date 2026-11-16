@@ -84,7 +84,7 @@ public class ShareDialog {
         box.addView(title);
 
         EditText tok = new EditText(act);
-        tok.setHint("对方令牌（对方的 API 弹窗里有）");
+        tok.setHint("令牌（不用填 —— 互传已在局域网内免校验；只有对方是老版本才要）");
         tok.setTextSize(13);
         tok.setSingleLine(true);
         tok.setInputType(InputType.TYPE_CLASS_TEXT);
