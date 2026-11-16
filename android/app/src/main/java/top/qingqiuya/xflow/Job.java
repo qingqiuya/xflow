@@ -13,7 +13,8 @@ public class Job {
     public String btId;          // Go 侧的任务 id
     public String state = "queued"; // queued / downloading / paused / done / error
     public String err = "";
-    public String path = "";      // 最终文件
+    public String path = "";      // 最终文件（私有目录时是路径，公共下载时是 content:// uri）
+    public String uri = "";       // 公共下载的 content uri（有就优先用它打开）
     public String partPath = "";  // 未完成的 .part
     public String metaPath = "";  // 断点信息
     public int segN = 8;          // 分块数

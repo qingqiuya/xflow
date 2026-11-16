@@ -961,14 +961,22 @@ public class MainActivity extends Activity {
 
     private void openFile(Job j) {
         try {
-            File f = new File(j.path);
-            if (!f.exists()) {
-                Toast.makeText(this, "文件还没落地", Toast.LENGTH_SHORT).show();
-                return;
+            Uri uri;
+            String name = j.name;
+            if (j.uri != null && j.uri.startsWith("content://")) {
+                // 已经在系统「下载/XFlow」里（MediaStore），直接用它的 uri
+                uri = Uri.parse(j.uri);
+            } else {
+                File f = new File(j.path);
+                if (!f.exists()) {
+                    Toast.makeText(this, "文件还没落地", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                name = f.getName();
+                uri = Uri.parse("content://" + getPackageName() + ".fileprovider" + f.getAbsolutePath());
             }
-            Uri uri = Uri.parse("content://" + getPackageName() + ".fileprovider" + f.getAbsolutePath());
             Intent i = new Intent(Intent.ACTION_VIEW);
-            i.setDataAndType(uri, guessMime(f.getName()));
+            i.setDataAndType(uri, guessMime(name));
             i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             startActivity(Intent.createChooser(i, "打开方式"));
         } catch (Exception e) {

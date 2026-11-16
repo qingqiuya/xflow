@@ -1,6 +1,11 @@
 package top.qingqiuya.xflow;
 
+import android.content.ContentValues;
 import android.content.Context;
+import android.net.Uri;
+import android.os.Build;
+import android.os.Environment;
+import android.provider.MediaStore;
 import android.util.Log;
 
 import org.json.JSONArray;
@@ -129,16 +134,26 @@ public class BiliVideo {
                 cb.onError("合并失败");
                 return;
             }
-            File out = new File(dir, safe + ".mp4");
-            if (out.exists()) out.delete();
-            if (!merged.renameTo(out)) {
-                copyFile(merged, out);
-                merged.delete();
-            }
+            // 落到系统「下载/XFlow」里，文件管理器能直接看到（私有目录太深）
+            String pub = publishToDownloads(ctx, merged, safe + ".mp4");
             vFile.delete();
             aFile.delete();
-            cb.onProgress(out.length(), out.length());
-            cb.onState("done:" + out.getAbsolutePath());
+            if (pub == null) {
+                // 公共目录写不进去就退回私有目录，至少别把这个视频丢了
+                File out = new File(dir, safe + ".mp4");
+                if (out.exists()) out.delete();
+                if (!merged.renameTo(out)) {
+                    copyFile(merged, out);
+                    merged.delete();
+                }
+                cb.onProgress(out.length(), out.length());
+                cb.onState("done:" + out.getAbsolutePath());
+                return;
+            }
+            long sz = merged.length();   // 先取大小，删掉之后再取就是 0 了
+            merged.delete();
+            cb.onProgress(sz, sz);
+            cb.onState("done:" + pub);
         } catch (Exception e) {
             Log.w(TAG, "下载出错", e);
             cb.onError(String.valueOf(e.getMessage()));
@@ -386,6 +401,48 @@ public class BiliVideo {
         String out = s.replaceAll("[\\\\/:*?\"<>|\\r\\n]", "_").trim();
         if (out.length() > 80) out = out.substring(0, 80);
         return out.isEmpty() ? "bili-video" : out;
+    }
+
+    /**
+     * 把成品放进系统公共目录 `下载/XFlow/`。
+     * Android 10+ 走 MediaStore（不用任何权限）；更老的直接写公共目录。
+     * 返回 content:// uri（新系统）或绝对路径（老系统），失败返回 null。
+     */
+    static String publishToDownloads(Context ctx, File src, String name) {
+        try {
+            if (Build.VERSION.SDK_INT >= 29) {
+                ContentValues cv = new ContentValues();
+                cv.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
+                cv.put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4");
+                cv.put(MediaStore.MediaColumns.RELATIVE_PATH,
+                        Environment.DIRECTORY_DOWNLOADS + "/XFlow");
+                cv.put(MediaStore.MediaColumns.IS_PENDING, 1);
+                Uri uri = ctx.getContentResolver()
+                        .insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, cv);
+                if (uri == null) return null;
+                try (OutputStream os = ctx.getContentResolver().openOutputStream(uri);
+                     InputStream in = new java.io.FileInputStream(src)) {
+                    if (os == null) return null;
+                    byte[] buf = new byte[256 * 1024];
+                    int n;
+                    while ((n = in.read(buf)) > 0) os.write(buf, 0, n);
+                }
+                cv.clear();
+                cv.put(MediaStore.MediaColumns.IS_PENDING, 0);
+                ctx.getContentResolver().update(uri, cv, null, null);
+                return uri.toString();
+            }
+            File dir = new File(
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                    "XFlow");
+            if (!dir.exists() && !dir.mkdirs()) return null;
+            File out = new File(dir, name);
+            copyFile(src, out);
+            return out.getAbsolutePath();
+        } catch (Exception e) {
+            Log.w(TAG, "写公共下载目录失败", e);
+            return null;
+        }
     }
 
     private static void copyFile(File src, File dst) {

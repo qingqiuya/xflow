@@ -156,7 +156,13 @@ public class DownloadService extends Service {
                 @Override
                 public void onState(String st) {
                     if (st.startsWith("done:")) {
-                        jj.path = st.substring(5);
+                        String dest = st.substring(5);
+                        if (dest.startsWith("content://")) {
+                            jj.uri = dest;      // 公共下载：打开时用这个
+                            jj.path = dest;
+                        } else {
+                            jj.path = dest;
+                        }
                         jj.state = "done";
                     } else {
                         jj.state = st;
