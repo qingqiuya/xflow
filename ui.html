@@ -101,7 +101,8 @@ button:active{transform:scale(.97)}
     <button class="ghost" id="torrentBtn" title="选一个 .torrent 文件加任务">上传种子文件</button>
     <button class="ghost" id="dir">下载目录</button>
     <button class="ghost" id="clear" title="清掉已完成/失败的历史记录">清空历史</button>
-    <button class="ghost" id="shareBtn" title="在这台和多台设备之间传文件">互传</button>
+    <button class="ghost" id="shareChip" title="互传总开关（关掉后别人传不进来）">互传开</button>
+    <button class="ghost" id="shareBtn" title="在这台和多台设备之间传文件">互传…</button>
     <button class="ghost" id="settingsBtn" title="对外接口 / API 用法">调用 API 下载</button>
   </div>
 </div>
@@ -150,6 +151,12 @@ button:active{transform:scale(.97)}
   </div>
   <div class="dlg-q"><span id="shWhere" style="color:var(--dim)"></span></div>
   <div class="dlg-list" id="shList"></div>
+  <div class="dlg-q" style="gap:8px;align-items:center">
+    <input id="shAddr" placeholder="手动加地址：10.11.11.147:17777 或 [240e:…]:17777" style="flex:1;padding:6px 9px;font-size:12.5px">
+    <button class="mini" id="shAddrAdd">添加</button>
+  </div>
+  <div class="dlg-q"><span style="color:var(--dim);font-size:12px">📥 收件箱</span>
+    <span id="shInbox" style="font-size:12px;color:var(--dim)">读取中…</span></div>
   <div class="dlg-q" style="gap:8px">
     <button class="mini" id="shClipSend" title="把本机剪贴板发到对方">📋 发剪贴板</button>
     <button class="mini" id="shClipGet" title="把对方剪贴板取过来">📥 取剪贴板</button>
@@ -186,11 +193,35 @@ async function shJ(u,opt){
   if(r.status===401){ document.getElementById('shTokWrap').style.display='flex'; throw new Error('对方要令牌') }
   return r.json();
 }
+// 手动地址（公网用）：存 localStorage，混进设备列表
+function shManual(){ try { return JSON.parse(localStorage.getItem('xflowManual')||'[]') } catch(e){ return [] } }
+function shSaveManual(list){ localStorage.setItem('xflowManual', JSON.stringify(list)) }
+document.getElementById('shAddrAdd').onclick = () => {
+  const v = document.getElementById('shAddr').value.trim();
+  if(!v) return;
+  const m = v.match(/^\[?([^\]]+)\]?:(\d+)$/);
+  let ip = v, port = 17777;
+  if (m) { ip = m[1]; port = parseInt(m[2], 10); }
+  else if (!v.includes(':')) { return alert('写成 ip:端口 或 [v6]:端口'); }
+  const list = shManual();
+  list.push({ip, port});
+  const uniq = list.filter((x,i)=>list.findIndex(y=>y.ip===x.ip&&y.port===x.port)===i);
+  shSaveManual(uniq);
+  document.getElementById('shAddr').value = '';
+  shOpen();
+};
+
 async function shOpen(){
   document.getElementById('shareMask').style.display='flex';
   shRefreshAuto();
+  shLoadInbox();
   const d=await (await fetch('/api/peers')).json();
   shPeers=(d.peers||[]).filter(p=>p.ip&&p.port);
+  for (const m of shManual()) {
+    if (!shPeers.some(p => p.ip === m.ip && p.port === m.port)) {
+      shPeers.push({ip:m.ip, port:m.port, name:'手动 '+m.ip, os:'manual'});
+    }
+  }
   const sel=document.getElementById('shDev');
   if(!shPeers.length){
     sel.innerHTML='<option>没发现别的设备</option>';
@@ -210,6 +241,27 @@ function pickSharePeer(i){
   document.getElementById('shMsg').textContent='';
   shBrowse('');
 }
+// 收件箱：列出收件目录里的文件
+async function shLoadInbox(){
+  const el = document.getElementById('shInbox');
+  if (!el) return;
+  try{
+    const d = await (await fetch('/api/share')).json();
+    const dir = d && d.dir;
+    if (!dir) { el.textContent = '（未知目录）'; return }
+    const r = await (await fetch('/api/fs?path=' + encodeURIComponent(dir))).json();
+    const files = (r.items||[]).filter(it => !it.dir);
+    if (!files.length) { el.textContent = '（空）'; return }
+    el.innerHTML = files.slice(0, 8).map(f =>
+      '<a href="#" data-f="' + esc(dir.replace(/[\\/]$/,'') + (dir.includes('\\')?'\\':'/') + f.name) + '" ' +
+      'style="color:var(--acc);text-decoration:none;margin-right:10px">' + esc(f.name) + '</a>'
+    ).join('');
+    el.querySelectorAll('a[data-f]').forEach(a => {
+      a.onclick = e => { e.preventDefault(); window.open('/api/download?path=' + encodeURIComponent(a.dataset.f), '_blank'); };
+    });
+  }catch(e){ el.textContent = '（读不到）' }
+}
+
 async function shBrowse(path){
   if(!shPeer) return;
   let d;
@@ -233,6 +285,29 @@ async function shBrowse(path){
   });
   document.getElementById('shUp').disabled=!d.parent;
 }
+// 互传总开关
+let shOn = true;
+async function shPaintChip(){
+  try{
+    const d = await (await fetch('/api/share')).json();
+    if (d && typeof d.enabled === 'boolean') shOn = d.enabled;
+  }catch(e){}
+  const b = document.getElementById('shareChip');
+  if (b) {
+    b.textContent = shOn ? '互传开' : '互传关';
+    b.style.color = shOn ? 'var(--ok)' : 'var(--dim)';
+  }
+}
+document.getElementById('shareChip').onclick = async () => {
+  shOn = !shOn;
+  try{
+    await fetch('/api/share', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({enabled: shOn})});
+  }catch(e){}
+  shPaintChip();
+};
+shPaintChip();
+
 document.getElementById('shareBtn').onclick=()=>shOpen();
 document.getElementById('shClose').onclick=()=>{ document.getElementById('shareMask').style.display='none' };
 document.getElementById('shUp').onclick=async()=>{

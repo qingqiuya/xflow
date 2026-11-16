@@ -42,6 +42,7 @@ type incomingFile struct {
 var (
 	shareMu      sync.Mutex
 	shareAuto    = true
+	shareEnabled = true   // 互传总开关（关掉后互传相关接口一律 403）
 	shareDirOv  string // 收到的文件放哪（空 = <下载目录>/收到）
 	sharePend    = map[string]*incomingFile{}
 	shareOrder   []string
@@ -415,10 +416,12 @@ func registerShare(mux *http.ServeMux) {
 
 	mux.HandleFunc("/api/share", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
-			writeShareJSON(w, map[string]any{"ok": true, "autoAccept": shareAutoVal(), "dir": shareRecvDir()})
+			writeShareJSON(w, map[string]any{"ok": true, "enabled": shareEnabledVal(),
+				"autoAccept": shareAutoVal(), "dir": shareRecvDir()})
 			return
 		}
 		var d struct {
+			Enabled    *bool  `json:"enabled"`
 			AutoAccept *bool  `json:"autoAccept"`
 			Dir        string `json:"dir"`
 		}
@@ -427,6 +430,9 @@ func registerShare(mux *http.ServeMux) {
 			return
 		}
 		shareMu.Lock()
+		if d.Enabled != nil {
+			shareEnabled = *d.Enabled
+		}
 		if d.AutoAccept != nil {
 			shareAuto = *d.AutoAccept
 		}
@@ -435,8 +441,15 @@ func registerShare(mux *http.ServeMux) {
 			shareDirOv = d.Dir
 		}
 		shareMu.Unlock()
-		writeShareJSON(w, map[string]any{"ok": true, "autoAccept": shareAutoVal(), "dir": shareRecvDir()})
+		writeShareJSON(w, map[string]any{"ok": true, "enabled": shareEnabledVal(),
+			"autoAccept": shareAutoVal(), "dir": shareRecvDir()})
 	})
+}
+
+func shareEnabledVal() bool {
+	shareMu.Lock()
+	defer shareMu.Unlock()
+	return shareEnabled
 }
 
 func shareAutoVal() bool {

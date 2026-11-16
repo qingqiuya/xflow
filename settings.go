@@ -189,6 +189,13 @@ func isPrivatePeer(r *http.Request) bool {
 
 func guardMux(mux *http.ServeMux, needToken bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// 互传总开关关着：除了 /api/share（用它来重新打开），一律 403
+		if isSharePath(r.URL.Path) && r.URL.Path != "/api/share" && !shareEnabledVal() {
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.WriteHeader(403)
+			json.NewEncoder(w).Encode(map[string]any{"ok": false, "err": "互传已关闭（在界面上点「互传」打开）"})
+			return
+		}
 		// 局域网里自家设备互传：放行（接收侧还有「自动接收」开关把关）
 		if needToken && isSharePath(r.URL.Path) && isPrivatePeer(r) {
 			mux.ServeHTTP(w, r)
