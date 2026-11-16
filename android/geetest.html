@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<style>
+  html,body{background:#12151c;margin:0;padding:0;font-family:system-ui,-apple-system,"MiSans",sans-serif;}
+  body{display:flex;align-items:center;justify-content:center;min-height:100vh;color:#cfd6e4;}
+  #cap{width:100%;display:flex;justify-content:center;}
+  .tip{color:#5b6478;font-size:12px;text-align:center;padding:0 24px;line-height:1.7;}
+</style>
+<script>
+  window.onerror = function (m, u, l) {
+    console.log('ERR ' + m + ' @' + u + ':' + l);
+    if (window.AndroidBridge) AndroidBridge.onError('JS: ' + m);
+  };
+  window.console = window.console || {};
+</script>
+<script src="https://static.geetest.com/static/js/gt.0.4.9.js"
+        onload="console.log('gt.js loaded, initGeetest=' + (typeof initGeetest))"
+        onerror="console.log('gt.js FAILED'); if(window.AndroidBridge) AndroidBridge.onError('极验脚本加载失败');"></script>
+</head>
+<body>
+<div id="cap"><div class="tip" id="tip">正在加载验证…</div></div>
+<script>
+(function () {
+  // 参数由 Java 端替换（用 https base 加载，不然 file:// 加载不了极验的 https 脚本）
+  var gt = '__GT__', challenge = '__CHALLENGE__';
+
+  function fail(msg) {
+    document.getElementById('tip').innerText = msg;
+    if (window.AndroidBridge) AndroidBridge.onError(msg);
+  }
+
+  var tries = 0;
+  function boot() {
+    if (typeof initGeetest !== 'function') {
+      if (tries++ % 10 === 0) console.log('waiting initGeetest, try=' + tries);
+      if (tries > 60) { fail('极验脚本没加载出来'); return; }
+      setTimeout(boot, 300);
+      return;
+    }
+    console.log('boot ok');
+    try {
+      initGeetest({
+        gt: gt,
+        challenge: challenge,
+        offline: false,
+        new_captcha: true,
+        product: 'float',
+        lang: 'zh-cn',
+        width: '100%'
+      }, function (obj) {
+        document.getElementById('tip').style.display = 'none';
+        obj.appendTo('#cap');
+        obj.onSuccess(function () {
+          var v = obj.getValidate();
+          if (window.AndroidBridge) {
+            AndroidBridge.onValidate(
+              v.geetest_validate || '', v.geetest_seccode || '',
+              v.geetest_challenge || '');
+          }
+        });
+        obj.onError(function () { fail('验证失败，请重试'); });
+        obj.onClose(function () { fail('已取消验证'); });
+      });
+    } catch (e) {
+      fail('加载失败：' + e);
+    }
+  }
+  boot();
+})();
+</script>
+</body>
+</html>

@@ -55,6 +55,10 @@ ASSETS=$APP/assets
 rm -rf "$ASSETS" && mkdir -p "$ASSETS"
 cp "$LICROOT/LICENSE" "$LICROOT/THIRD_PARTY_LICENSES.md" "$ASSETS/"
 cp -r "$LICROOT/licenses" "$ASSETS/licenses"
+# 极验滑块页面（B 站登录用）：我们自己的深色壳 + 极验 JS
+for f in "$HERE/geetest.html" "$LICROOT/android/geetest.html"; do
+  if [ -f "$f" ]; then cp "$f" "$ASSETS/geetest.html"; break; fi
+done
 
 
 echo "[1/6] 编译资源"

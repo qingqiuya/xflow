@@ -92,7 +92,7 @@ public class BiliLogin {
 
     // ------------------------------------------------------------ 入口
 
-    /** 统一深色壳：扫码 / 网页 两个 tab 在一个对话框里切。 */
+    /** 统一深色壳：扫码 / 账号 两个 tab 在一个对话框里切（不加载 B 站页面）。 */
     public static void showLogin(final Activity a, final Runnable onSuccess) {
         final android.app.Dialog dlg = new android.app.Dialog(a, R.style.DarkDialog);
         android.view.View root = android.view.LayoutInflater.from(a)
@@ -107,16 +107,24 @@ public class BiliLogin {
         }
 
         final TextView tabQr = root.findViewById(R.id.tabQr);
-        final TextView tabWeb = root.findViewById(R.id.tabWeb);
+        final TextView tabAcc = root.findViewById(R.id.tabAcc);
         final LinearLayout pageQr = root.findViewById(R.id.pageQr);
-        final LinearLayout pageWeb = root.findViewById(R.id.pageWeb);
+        final LinearLayout pageAcc = root.findViewById(R.id.pageAcc);
         final TextView qrTip = root.findViewById(R.id.qrTip);
         final ImageView qrImage = root.findViewById(R.id.qrImage);
         final TextView qrSave = root.findViewById(R.id.qrSave);
-        final TextView webTip = root.findViewById(R.id.webTip);
         final TextView close = root.findViewById(R.id.biliRowClose);
         final TextView logout = root.findViewById(R.id.biliLogout);
-        final WebView web = root.findViewById(R.id.loginWeb);
+
+        final android.widget.EditText phone = root.findViewById(R.id.accPhone);
+        final android.widget.EditText pwd = root.findViewById(R.id.accPwd);
+        final android.widget.EditText code = root.findViewById(R.id.accCode);
+        final LinearLayout smsRow = root.findViewById(R.id.smsRow);
+        final TextView btnSend = root.findViewById(R.id.btnSendCode);
+        final TextView btnLogin = root.findViewById(R.id.btnLogin);
+        final TextView accTip = root.findViewById(R.id.accTip);
+        final TextView modePwd = root.findViewById(R.id.modePwd);
+        final TextView modeSms = root.findViewById(R.id.modeSms);
 
         if (loggedIn(a)) logout.setVisibility(android.view.View.VISIBLE);
         close.setOnClickListener(v -> dlg.dismiss());
@@ -127,59 +135,10 @@ public class BiliLogin {
             if (onSuccess != null) onSuccess.run();
         });
 
-        // ---- 网页 tab
-        final boolean[] webReady = {false};
-        final Runnable loadWeb = () -> {
-            if (webReady[0]) return;
-            webReady[0] = true;
-            WebSettings st = web.getSettings();
-            st.setJavaScriptEnabled(true);
-            st.setDomStorageEnabled(true);
-            st.setUserAgentString(UA);
-            CookieManager.getInstance().setAcceptCookie(true);
-            CookieManager.getInstance().setAcceptThirdPartyCookies(web, true);
-            // 扒掉 B 站那层皮：顶部导航、页脚、页面装饰全藏掉，
-            // 背景换成 App 的深色，只留中间的登录卡片——看着像咱们自己的页面。
-            final String peel = "(function(){try{"
-                    + "var css='#biliMainHeader,#biliMainFooter{display:none!important}'"
-                    + "+'html,body{background:#12151c!important}'"
-                    + "+'body *{color:#cfd6e4!important}'"
-                    + "+'div{background-color:transparent!important}'"
-                    + "+'#passport-app{min-height:100vh!important;padding-top:8px!important}'"
-                    + "+'input{background:#0f1420!important;color:#e8ebf2!important;"
-                    + "border:1px solid #2a3244!important;border-radius:8px!important}'"
-                    + "+'button{background:#4CC2FF!important;color:#0b0f17!important;"
-                    + "border-radius:8px!important}'"
-                    + "+'img[src*=\"2233\"],img[src*=\"logo\"],img[alt*=\"bilibili\"]"
-                    + "{display:none!important}';"
-                    + "var s=document.createElement('style');s.textContent=css;"
-                    + "(document.head||document.documentElement).appendChild(s);"
-                    // 顶部那块 B 站插画是 background-image 的元素，不是 img，
-                    // 按「有背景图 + 宽度够 + 高度在 120~600 之间」认出来藏掉
-                    + "setTimeout(function(){try{"
-                    + "document.querySelectorAll('#passport-app *').forEach(function(el){"
-                    + "var st=getComputedStyle(el);var bi=st.backgroundImage||'';"
-                    + "var w=el.offsetWidth||0,h=el.offsetHeight||0;"
-                    + "if(bi.indexOf('url(')>=0 && w>300 && h>120 && h<600){el.style.display='none';}"
-                    + "});}catch(e){}},1200);"
-                    + "}catch(e){}})();";
-
-            web.setWebViewClient(new android.webkit.WebViewClient() {
-                @Override
-                public void onPageFinished(WebView v, String url) {
-                    try {
-                        v.evaluateJavascript(peel, null);
-                    } catch (Throwable ignored) {
-                    }
-                }
-            });
-            web.loadUrl("https://passport.bilibili.com/login");
-        };
-
-        // ---- 扫码 tab
+        // ---------------- 扫码 tab
         final boolean[] stop = {false};
-        final String[] key = new String[]{null};
-        final Bitmap[] bmp = new Bitmap[]{null};
+        final String[] key = {null};
+        final Bitmap[] bmp = {null};
         final Runnable loadQr = () -> {
             if (key[0] != null) return;
             new Thread(() -> {
@@ -244,38 +203,199 @@ public class BiliLogin {
                     Toast.LENGTH_SHORT).show();
         });
 
+        // ---------------- 账号 tab（自己画的表单）
+        final boolean[] smsMode = {false};
+        final BiliAccount.Captcha[] cap = {null};      // 一次验证复用：发码 / 登录
+        final String[] captchaKey = {""};
+        final String[] verified = {null, null, null};  // validate, seccode, challenge
+
+        final Runnable applyMode = () -> {
+            boolean sms = smsMode[0];
+            pwd.setVisibility(sms ? android.view.View.GONE : android.view.View.VISIBLE);
+            smsRow.setVisibility(sms ? android.view.View.VISIBLE : android.view.View.GONE);
+            modePwd.setTextColor(sms ? 0xFF6b7488 : 0xFF4CC2FF);
+            modeSms.setTextColor(sms ? 0xFF4CC2FF : 0xFF6b7488);
+            accTip.setText(sms ? "先过一次极验滑块，才能收到短信" : "密码登录需要过一次极验滑块");
+        };
+        modePwd.setOnClickListener(v -> {
+            smsMode[0] = false;
+            applyMode.run();
+        });
+        modeSms.setOnClickListener(v -> {
+            smsMode[0] = true;
+            applyMode.run();
+        });
+
+        // 极验滑块：只在这时候弹，页面是我们自己的壳 + 极验的验证码，不出现 B 站页面
+        final java.util.function.Consumer<Runnable> runCaptcha = (after) -> {
+            new Thread(() -> {
+                try {
+                    BiliAccount.Captcha c = BiliAccount.getCaptcha();
+                    cap[0] = c;
+                    a.runOnUiThread(() -> showGeetest(a, c, (v, s, ch) -> {
+                        verified[0] = v;
+                        verified[1] = s;
+                        verified[2] = ch;
+                        captchaKey[0] = c.token;
+                        accTip.setText("验证通过");
+                        if (after != null) after.run();
+                    }));
+                } catch (Exception e) {
+                    a.runOnUiThread(() -> accTip.setText("拿验证参数失败：" + e.getMessage()));
+                }
+            }).start();
+        };
+
+        btnSend.setOnClickListener(v -> {
+            final String tel = phone.getText().toString().trim();
+            if (tel.length() < 6) {
+                accTip.setText("先填手机号");
+                return;
+            }
+            accTip.setText("正在获取验证…");
+            runCaptcha.accept(() -> new Thread(() -> {
+                BiliAccount.Result r = BiliAccount.sendSms(tel, 86, cap[0],
+                        verified[0], verified[1], verified[2]);
+                a.runOnUiThread(() -> accTip.setText(r.ok ? "验证码已发送" : "发送失败：" + r.err));
+            }).start());
+        });
+
+        btnLogin.setOnClickListener(v -> {
+            final String tel = phone.getText().toString().trim();
+            if (tel.isEmpty()) {
+                accTip.setText("先填手机号");
+                return;
+            }
+            accTip.setText("正在获取验证…");
+            runCaptcha.accept(() -> new Thread(() -> {
+                BiliAccount.Result r;
+                if (smsMode[0]) {
+                    String cd = code.getText().toString().trim();
+                    r = BiliAccount.loginBySms(tel, 86, cd, captchaKey[0]);
+                } else {
+                    String pw = pwd.getText().toString();
+                    if (pw.isEmpty()) {
+                        a.runOnUiThread(() -> accTip.setText("先填密码"));
+                        return;
+                    }
+                    r = BiliAccount.loginByPassword(tel, pw, cap[0],
+                            verified[0], verified[1], verified[2]);
+                }
+                final BiliAccount.Result rr = r;
+                a.runOnUiThread(() -> {
+                    if (rr.ok) {
+                        save(a, rr.sessdata, rr.biliJct, rr.uid);
+                        Toast.makeText(a, "登录成功", Toast.LENGTH_SHORT).show();
+                        dlg.dismiss();
+                        if (onSuccess != null) onSuccess.run();
+                    } else {
+                        accTip.setText("失败：" + rr.err);
+                    }
+                });
+            }).start());
+        });
+
         // tab 切换
-        final Runnable[] showQr = new Runnable[1];
-        final Runnable[] showWeb = new Runnable[1];
-        showQr[0] = () -> {
+        tabQr.setOnClickListener(v -> {
             pageQr.setVisibility(android.view.View.VISIBLE);
-            pageWeb.setVisibility(android.view.View.GONE);
+            pageAcc.setVisibility(android.view.View.GONE);
             tabQr.setTextColor(0xFF4CC2FF);
-            tabWeb.setTextColor(0xFF6b7488);
+            tabAcc.setTextColor(0xFF6b7488);
             loadQr.run();
-        };
-        showWeb[0] = () -> {
+        });
+        tabAcc.setOnClickListener(v -> {
             pageQr.setVisibility(android.view.View.GONE);
-            pageWeb.setVisibility(android.view.View.VISIBLE);
-            tabWeb.setTextColor(0xFF4CC2FF);
+            pageAcc.setVisibility(android.view.View.VISIBLE);
+            tabAcc.setTextColor(0xFF4CC2FF);
             tabQr.setTextColor(0xFF6b7488);
-            loadWeb.run();
-        };
-        tabQr.setOnClickListener(v -> showQr[0].run());
-        tabWeb.setOnClickListener(v -> showWeb[0].run());
+        });
 
-        // 默认开扫码（成功率高、不用输密码）
-        showQr[0].run();
+        applyMode.run();
+        tabQr.performClick();
+        dlg.setOnDismissListener(x -> stop[0] = true);
+        dlg.show();
+    }
 
-        dlg.setOnDismissListener(x -> {
-            stop[0] = true;
-            try {
-                web.stopLoading();
-                web.destroy();
-            } catch (Throwable ignored) {
+    interface OnGeetest {
+        void ok(String validate, String seccode, String challenge);
+    }
+
+    /** 弹极验滑块（WebView 加载我们自己的壳页面 + 极验 JS）。 */
+    private static void showGeetest(Activity a, BiliAccount.Captcha c, OnGeetest cb) {
+        final WebView wv = new WebView(a);
+        WebSettings st = wv.getSettings();
+        st.setJavaScriptEnabled(true);
+        st.setDomStorageEnabled(true);
+        st.setUserAgentString(UA);
+        wv.setBackgroundColor(0xFF12151C);
+        wv.setWebChromeClient(new android.webkit.WebChromeClient() {
+            @Override
+            public boolean onConsoleMessage(android.webkit.ConsoleMessage m) {
+                Log.i(TAG, "geetest console: " + m.message() + " @" + m.lineNumber());
+                return true;
             }
         });
-        dlg.show();
+        wv.setWebViewClient(new android.webkit.WebViewClient() {
+            @Override
+            public void onPageFinished(WebView v, String url) {
+                Log.i(TAG, "geetest page finished: " + url);
+            }
+
+            @Override
+            public void onReceivedError(WebView v, android.webkit.WebResourceRequest r,
+                                        android.webkit.WebResourceError e) {
+                Log.w(TAG, "geetest error: " + r.getUrl() + " " + e.getDescription());
+            }
+        });
+
+        final android.app.Dialog d = new android.app.Dialog(a, R.style.DarkDialog);
+        wv.addJavascriptInterface(new Object() {
+            @android.webkit.JavascriptInterface
+            public void onValidate(String v, String s, String ch) {
+                a.runOnUiThread(() -> {
+                    try {
+                        d.dismiss();
+                    } catch (Throwable ignored) {
+                    }
+                    cb.ok(v, s, ch);
+                });
+            }
+
+            @android.webkit.JavascriptInterface
+            public void onError(String msg) {
+                a.runOnUiThread(() -> Toast.makeText(a, msg, Toast.LENGTH_SHORT).show());
+            }
+        }, "AndroidBridge");
+
+        int hpx = (int) (a.getResources().getDisplayMetrics().heightPixels * 0.62);
+        d.setContentView(wv, new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, hpx));
+        android.view.Window w = d.getWindow();
+        if (w != null) {
+            w.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(0xFF12151C));
+            int wid = (int) (a.getResources().getDisplayMetrics().widthPixels * 0.92);
+            w.setLayout(wid, ViewGroup.LayoutParams.WRAP_CONTENT);
+        }
+        // file:// 页面加载不了 https 的极验脚本（null origin + 混合内容），
+        // 所以把 HTML 读出来，用 bilibili 域名当 base 走 loadDataWithBaseURL。
+        try {
+            java.io.InputStream in = a.getAssets().open("geetest.html");
+            java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = in.read(buf)) > 0) bo.write(buf, 0, n);
+            in.close();
+            String html = new String(bo.toByteArray(), "UTF-8")
+                    .replace("__GT__", c.gt)
+                    .replace("__CHALLENGE__", c.challenge);
+            wv.getSettings().setMixedContentMode(
+                    WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+            wv.loadDataWithBaseURL("https://www.bilibili.com/", html,
+                    "text/html", "UTF-8", null);
+        } catch (Exception e) {
+            Log.w(TAG, "读极验页面失败", e);
+        }
+        d.show();
     }
 
     private static Bitmap qrBitmap(String text, int size) {

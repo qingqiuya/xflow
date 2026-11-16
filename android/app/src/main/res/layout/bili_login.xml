@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- B 站登录：统一深色卡片，扫码 / 网页两个 tab 在同一个壳里切 -->
+<!-- B 站登录：统一深色卡片，扫码 / 账号两个 tab 在同一个壳里切（不显示 B 站页面） -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -60,13 +60,13 @@
             android:layout_marginEnd="8dp" />
 
         <TextView
-            android:id="@+id/tabWeb"
+            android:id="@+id/tabAcc"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:background="@drawable/chip_bg"
             android:paddingHorizontal="12dp"
             android:paddingVertical="5dp"
-            android:text="网页"
+            android:text="账号"
             android:textColor="#6b7488"
             android:textSize="12sp" />
     </LinearLayout>
@@ -120,36 +120,123 @@
             android:textSize="10.5sp" />
     </LinearLayout>
 
-    <!-- 网页页 -->
+    <!-- 账号页（自己的表单，不加载 B 站页面） -->
     <LinearLayout
-        android:id="@+id/pageWeb"
+        android:id="@+id/pageAcc"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
+        android:layout_marginTop="14dp"
         android:orientation="vertical"
         android:visibility="gone">
 
-        <FrameLayout
-            android:id="@+id/webBox"
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/modePwd"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingVertical="4dp"
+                android:text="密码登录"
+                android:textColor="#4CC2FF"
+                android:textSize="12sp"
+                android:layout_marginEnd="16dp" />
+
+            <TextView
+                android:id="@+id/modeSms"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingVertical="4dp"
+                android:text="短信登录"
+                android:textColor="#6b7488"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <EditText
+            android:id="@+id/accPhone"
             android:layout_width="match_parent"
-            android:layout_height="440dp"
-            android:background="@drawable/web_box_bg"
-            android:clipToOutline="true">
+            android:layout_height="44dp"
+            android:background="@drawable/input_bg"
+            android:hint="手机号"
+            android:inputType="phone"
+            android:maxLength="11"
+            android:paddingHorizontal="12dp"
+            android:textColor="#e8ebf2"
+            android:textColorHint="#5b6478"
+            android:textSize="14sp" />
 
-            <WebView
-                android:id="@+id/loginWeb"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent" />
-        </FrameLayout>
+        <EditText
+            android:id="@+id/accPwd"
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/input_bg"
+            android:hint="密码"
+            android:inputType="textPassword"
+            android:paddingHorizontal="12dp"
+            android:textColor="#e8ebf2"
+            android:textColorHint="#5b6478"
+            android:textSize="14sp" />
 
-        <TextView
-            android:id="@+id/webTip"
+        <LinearLayout
+            android:id="@+id/smsRow"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="登录成功后会自动关闭并保存 Cookie"
+            android:layout_marginTop="10dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <EditText
+                android:id="@+id/accCode"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:background="@drawable/input_bg"
+                android:hint="短信验证码"
+                android:inputType="number"
+                android:maxLength="6"
+                android:paddingHorizontal="12dp"
+                android:textColor="#e8ebf2"
+                android:textColorHint="#5b6478"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/btnSendCode"
+                android:layout_width="wrap_content"
+                android:layout_height="44dp"
+                android:layout_marginStart="10dp"
+                android:background="@drawable/btn_small_bg"
+                android:gravity="center"
+                android:paddingHorizontal="14dp"
+                android:text="获取验证码"
+                android:textColor="#cfd6e4"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/accTip"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="密码登录需要过一次极验滑块"
             android:textColor="#5b6478"
             android:textSize="10.5sp" />
+
+        <TextView
+            android:id="@+id/btnLogin"
+            android:layout_width="match_parent"
+            android:layout_height="46dp"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/primary"
+            android:gravity="center"
+            android:text="登录"
+            android:textColor="#0b0f17"
+            android:textSize="15sp"
+            android:textStyle="bold" />
     </LinearLayout>
 
     <TextView
