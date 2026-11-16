@@ -96,6 +96,21 @@ public class MainActivity extends Activity {
         if (tabDownload != null) tabDownload.setOnClickListener(v -> showPage(0));
         if (tabShare != null) tabShare.setOnClickListener(v -> showPage(1));
         initPager();
+        // 键盘遮挡兜底：Android 15+ 的 edge-to-edge 会让 adjustResize 失效，
+        // 这里自己按 IME 高度给内容区加底部内边距（键盘收起就还回去）
+        {
+            final View content = findViewById(android.R.id.content);
+            if (content != null) {
+                content.setOnApplyWindowInsetsListener((v, insets) -> {
+                    int ime = insets.getSystemWindowInsetBottom();
+                    int pad = ime > dp(120) ? ime : 0;
+                    if (v.getPaddingBottom() != pad) {
+                        v.setPadding(v.getPaddingLeft(), v.getPaddingTop(), v.getPaddingRight(), pad);
+                    }
+                    return insets;
+                });
+            }
+        }
         // 互传面板挂上（两页都在同一棵树里，先把 listener 装好）
         {
             View panel = findViewById(R.id.sharePanel);
