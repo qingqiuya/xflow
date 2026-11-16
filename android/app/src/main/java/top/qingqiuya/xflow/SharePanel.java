@@ -84,6 +84,13 @@ public class SharePanel {
             postClipboard(t, true);
         });
 
+        textInput.setOnFocusChangeListener((v, has) -> {
+            if (has) ensureVisible(v);
+        });
+        addrInput.setOnFocusChangeListener((v, has) -> {
+            if (has) ensureVisible(v);
+        });
+
         loadManual();
         if (selfTag != null) selfTag.setText("本机 " + localIpTag());
         refreshDevices();
@@ -637,6 +644,27 @@ public class SharePanel {
     private void say(String s) {
         status.setText(s);
         if (!s.isEmpty()) Toast.makeText(act, s, Toast.LENGTH_SHORT).show();
+    }
+
+    /** 键盘弹起来之后，把正在输入的控件滚到可视区里。 */
+    private void ensureVisible(View v) {
+        ui.postDelayed(() -> {
+            View p = v;
+            while (p != null && !(p instanceof android.widget.ScrollView)) {
+                if (!(p.getParent() instanceof View)) {
+                    p = null;
+                    break;
+                }
+                p = (View) p.getParent();
+            }
+            if (p instanceof android.widget.ScrollView) {
+                android.widget.ScrollView sv = (android.widget.ScrollView) p;
+                android.graphics.Rect r = new android.graphics.Rect();
+                v.getDrawingRect(r);
+                r.offset(0, dp(90)); // 再留一点余量，别贴着键盘边
+                sv.requestChildRectangleOnScreen(v, r, true);
+            }
+        }, 320);
     }
 
     private int dp(int v) {
