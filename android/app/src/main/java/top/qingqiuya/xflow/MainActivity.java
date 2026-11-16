@@ -35,7 +35,6 @@ public class MainActivity extends Activity {
     private ApiServer api;
     private Beacon beacon;
     private SharePanel sharePanel;
-    private android.view.GestureDetector gestureDetector;
     private int curPage = 0;
     private LinearLayout jobList;
     private TextView statText;
@@ -96,22 +95,7 @@ public class MainActivity extends Activity {
         TextView tabShare = findViewById(R.id.tabShare);
         if (tabDownload != null) tabDownload.setOnClickListener(v -> showPage(0));
         if (tabShare != null) tabShare.setOnClickListener(v -> showPage(1));
-        gestureDetector = new android.view.GestureDetector(this,
-                new android.view.GestureDetector.SimpleOnGestureListener() {
-                    @Override
-                    public boolean onFling(android.view.MotionEvent e1, android.view.MotionEvent e2,
-                                           float vx, float vy) {
-                        if (e1 == null || e2 == null) return false;
-                        float dx = e2.getX() - e1.getX();
-                        float dy = e2.getY() - e1.getY();
-                        if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.2f) {
-                            showPage(dx < 0 ? 1 : 0);
-                            return true;
-                        }
-                        return false;
-                    }
-                });
-        showPage(0);
+        initPager();
         // 互传面板挂上（两页都在同一棵树里，先把 listener 装好）
         {
             View panel = findViewById(R.id.sharePanel);
@@ -931,13 +915,95 @@ public class MainActivity extends Activity {
         return "*/*";
     }
 
-    /** 切页：0 下载 / 1 互传。带滑动 + 淡入淡出。 */
-    private void showPage(int idx) {
+    // ---------------- 两页滑动（跟手） ----------------
+    private float pageProgress = 0f;   // 0 = 下载页，1 = 互传页
+    private float downX, downY, startProgress;
+    private boolean dragging;
+    private int pagerW;
+    private android.animation.ValueAnimator pageAnim;
+
+    private void initPager() {
         final View pd = findViewById(R.id.pageDownload);
-        final View ps = findViewById(R.id.pageShare);
+        if (pd == null) return;
+        pd.post(() -> {
+            View parent = (View) pd.getParent();
+            pagerW = parent != null ? parent.getWidth() : pd.getWidth();
+            pageProgress = 0f;
+            applyProgress(0f);
+            View ps = findViewById(R.id.pageShare);
+            if (ps != null) ps.setVisibility(View.GONE);
+        });
+    }
+
+    /** 把两页按进度摆位置：进度 0 时下载页占满、互传页在右边外面；1 时反过来。 */
+    private void applyProgress(float p) {
+        View pd = findViewById(R.id.pageDownload);
+        View ps = findViewById(R.id.pageShare);
+        if (pd == null || ps == null) return;
+        if (pagerW == 0) {
+            View parent = (View) pd.getParent();
+            if (parent != null && parent.getWidth() > 0) pagerW = parent.getWidth();
+            if (pagerW == 0) return;
+        }
+        pd.setVisibility(View.VISIBLE);
+        ps.setVisibility(View.VISIBLE);
+        pd.setTranslationX(-p * pagerW);
+        ps.setTranslationX((1f - p) * pagerW);
+        pd.setAlpha(1f - 0.2f * p);
+        ps.setAlpha(0.8f + 0.2f * p);
+    }
+
+    /** 松手/点页签后吸附到某一页。 */
+    private void animateToPage(final int page) {
+        final float target = page == 1 ? 1f : 0f;
+        setTabStyle(page);
+        if (pageAnim != null) pageAnim.cancel();
+        pageAnim = android.animation.ValueAnimator.ofFloat(pageProgress, target);
+        pageAnim.setDuration((long) (150 + 140 * Math.abs(target - pageProgress)));
+        pageAnim.setInterpolator(new android.view.animation.DecelerateInterpolator());
+        pageAnim.addUpdateListener(a -> {
+            pageProgress = (float) a.getAnimatedValue();
+            applyProgress(pageProgress);
+        });
+        pageAnim.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(android.animation.Animator a) {
+                pageProgress = target;
+                View pd = findViewById(R.id.pageDownload);
+                View ps = findViewById(R.id.pageShare);
+                if (target == 1f) {
+                    if (pd != null) {
+                        pd.setVisibility(View.GONE);
+                        pd.setTranslationX(0f);
+                        pd.setAlpha(1f);
+                    }
+                    if (ps != null) {
+                        ps.setTranslationX(0f);
+                        ps.setAlpha(1f);
+                    }
+                } else {
+                    if (ps != null) {
+                        ps.setVisibility(View.GONE);
+                        ps.setTranslationX(0f);
+                        ps.setAlpha(1f);
+                    }
+                    if (pd != null) {
+                        pd.setTranslationX(0f);
+                        pd.setAlpha(1f);
+                    }
+                }
+            }
+        });
+        pageAnim.start();
+    }
+
+    private void showPage(int idx) {
+        animateToPage(idx);
+    }
+
+    private void setTabStyle(int idx) {
         TextView td = findViewById(R.id.tabDownload);
         TextView ts = findViewById(R.id.tabShare);
-
         if (td != null) {
             td.setTextColor(idx == 0 ? 0xFFe8ebf2 : 0xFF6b7385);
             td.setTypeface(null, idx == 0 ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
@@ -946,49 +1012,51 @@ public class MainActivity extends Activity {
             ts.setTextColor(idx == 1 ? 0xFFe8ebf2 : 0xFF6b7385);
             ts.setTypeface(null, idx == 1 ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
         }
-        if (pd == null || ps == null) return;
-
-        final View in = idx == 0 ? pd : ps;
-        final View out = idx == 0 ? ps : pd;
-        if (idx == curPage && in.getVisibility() == View.VISIBLE) return;
-        int dir = idx == 1 ? 1 : -1;      // 往互传滑 = 从右边进；往下载滑 = 从左边进
-        final int shift = dp(34);
-
-        android.view.animation.Interpolator ease =
-                new android.view.animation.DecelerateInterpolator();
-
-        // 旧页：反向滑一点 + 淡出，结束后藏起来并复位
-        out.animate().cancel();
-        if (out.getVisibility() == View.VISIBLE) {
-            out.animate().translationX(-dir * shift).alpha(0f).setDuration(170)
-                    .setInterpolator(ease)
-                    .withEndAction(() -> {
-                        out.setVisibility(View.GONE);
-                        out.setTranslationX(0f);
-                        out.setAlpha(1f);
-                    })
-                    .start();
-        } else {
-            out.setVisibility(View.GONE);
-            out.setTranslationX(0f);
-            out.setAlpha(1f);
-        }
-
-        // 新页：从另一侧滑进来 + 淡入
-        in.animate().cancel();
-        in.setVisibility(View.VISIBLE);
-        in.setTranslationX(dir * shift);
-        in.setAlpha(0f);
-        in.animate().translationX(0f).alpha(1f).setDuration(210)
-                .setInterpolator(ease)
-                .start();
-
-        curPage = idx;
     }
 
     @Override
     public boolean dispatchTouchEvent(android.view.MotionEvent ev) {
-        if (gestureDetector != null) gestureDetector.onTouchEvent(ev);
+        switch (ev.getActionMasked()) {
+            case android.view.MotionEvent.ACTION_DOWN:
+                downX = ev.getX();
+                downY = ev.getY();
+                startProgress = pageProgress;
+                dragging = false;
+                if (pageAnim != null && pageAnim.isRunning()) pageAnim.cancel();
+                break;
+            case android.view.MotionEvent.ACTION_MOVE: {
+                float dx = ev.getX() - downX;
+                float dy = ev.getY() - downY;
+                if (!dragging) {
+                    // 横向位移明显大于纵向才当翻页，别抢竖向滚动
+                    if (Math.abs(dx) > dp(14) && Math.abs(dx) > Math.abs(dy) * 1.3f) {
+                        dragging = true;
+                    } else {
+                        break;
+                    }
+                }
+                if (pagerW == 0) break;
+                float p = startProgress - dx / (float) pagerW;
+                pageProgress = Math.max(0f, Math.min(1f, p));
+                applyProgress(pageProgress);
+                return true; // 跟手阶段把事件吃掉
+            }
+            case android.view.MotionEvent.ACTION_UP:
+            case android.view.MotionEvent.ACTION_CANCEL: {
+                if (!dragging) break;
+                dragging = false;
+                float dx = ev.getX() - downX;
+                float p = pagerW > 0 ? (startProgress - dx / (float) pagerW) : startProgress;
+                // 轻扫也算：位移超过 1/6 屏就往那页走
+                boolean goShare = p > 0.5f - 0.17f && dx < 0 || p > 0.83f;
+                boolean goDown = p < 0.5f + 0.17f && dx > 0 || p < 0.17f;
+                int target = (p >= 0.5f) ? 1 : 0;
+                if (dx < 0 && p > 0.34f) target = 1;
+                if (dx > 0 && p < 0.66f) target = 0;
+                animateToPage(target);
+                return true;
+            }
+        }
         return super.dispatchTouchEvent(ev);
     }
 
