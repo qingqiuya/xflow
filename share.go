@@ -217,6 +217,25 @@ func registerShare(mux *http.ServeMux) {
 				dir = shareRecvDir()
 			}
 			os.MkdirAll(dir, 0o755)
+			if !shareAutoVal() {
+				// 手动同意：先落临时区，等用户点「接收」
+				tmp := filepath.Join(os.TempDir(), "xflow-in-"+shareToken(6))
+				out, err := os.Create(tmp)
+				if err != nil {
+					writeShareJSON(w, map[string]any{"ok": false, "err": err.Error()})
+					return
+				}
+				n, err := io.Copy(out, r.Body)
+				out.Close()
+				if err != nil {
+					os.Remove(tmp)
+					writeShareJSON(w, map[string]any{"ok": false, "err": err.Error()})
+					return
+				}
+				f := shareAddPending(filepath.Base(nm), r.RemoteAddr, tmp, n)
+				writeShareJSON(w, map[string]any{"ok": true, "pending": true, "id": f.ID, "name": f.Name, "size": n})
+				return
+			}
 			dst := filepath.Join(dir, filepath.Base(nm))
 			out, err := os.Create(dst)
 			if err != nil {
