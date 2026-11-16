@@ -1,0 +1,244 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <!-- 顶部：返回 + 标题 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="16dp"
+        android:paddingTop="18dp"
+        android:paddingBottom="12dp">
+
+        <TextView
+            android:id="@+id/backBtn"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="←"
+            android:textColor="#8b93a7"
+            android:textSize="22sp"
+            android:paddingEnd="14dp" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="互传"
+            android:textColor="#e8ebf2"
+            android:textSize="22sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/selfTag"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textColor="#8b93a7"
+            android:textSize="11.5sp" />
+    </LinearLayout>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fillViewport="true"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="16dp"
+            android:paddingBottom="28dp">
+
+            <!-- 当前目标 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="@drawable/card"
+                android:padding="14dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="发送到"
+                    android:textColor="#8b93a7"
+                    android:textSize="11.5sp" />
+
+                <TextView
+                    android:id="@+id/targetText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="还没选设备 —— 下面点一个"
+                    android:textColor="#e8ebf2"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:paddingTop="4dp" />
+            </LinearLayout>
+
+            <!-- 设备 -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="设备（自动发现）"
+                android:textColor="#8b93a7"
+                android:textSize="12sp"
+                android:paddingTop="18dp"
+                android:paddingBottom="8dp" />
+
+            <LinearLayout
+                android:id="@+id/devicesBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+
+            <!-- 手动加地址（公网用） -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingTop="8dp">
+
+                <EditText
+                    android:id="@+id/addrInput"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:hint="手动加地址：[240e:…]:17777 或 1.2.3.4:17777"
+                    android:textSize="12.5sp"
+                    android:singleLine="true"
+                    android:inputType="text"
+                    android:textColorHint="#6b7385"
+                    android:textColor="#e8ebf2"
+                    android:background="@drawable/field"
+                    android:paddingHorizontal="12dp"
+                    android:paddingVertical="10dp" />
+
+                <Button
+                    android:id="@+id/addrAdd"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:text="添加"
+                    android:textSize="12.5sp"
+                    android:textAllCaps="false"
+                    android:background="@drawable/chip"
+                    android:textColor="#7fd4ff" />
+            </LinearLayout>
+
+            <!-- 收件箱 -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="📥 收件箱（下载/XFlow）"
+                android:textColor="#8b93a7"
+                android:textSize="12sp"
+                android:paddingTop="20dp"
+                android:paddingBottom="8dp" />
+
+            <LinearLayout
+                android:id="@+id/inboxBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+
+            <!-- 剪贴板 -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="📋 剪贴板 / 文字"
+                android:textColor="#8b93a7"
+                android:textSize="12sp"
+                android:paddingTop="20dp"
+                android:paddingBottom="8dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/clipSend"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="发本机剪贴板"
+                    android:textSize="12.5sp"
+                    android:textAllCaps="false"
+                    android:background="@drawable/chip"
+                    android:textColor="#e8ebf2" />
+
+                <Button
+                    android:id="@+id/clipGet"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="8dp"
+                    android:text="取对方剪贴板"
+                    android:textSize="12.5sp"
+                    android:textAllCaps="false"
+                    android:background="@drawable/chip"
+                    android:textColor="#e8ebf2" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingTop="8dp">
+
+                <EditText
+                    android:id="@+id/textInput"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:hint="打一段字发过去"
+                    android:textSize="12.5sp"
+                    android:inputType="textMultiLine"
+                    android:maxLines="3"
+                    android:textColorHint="#6b7385"
+                    android:textColor="#e8ebf2"
+                    android:background="@drawable/field"
+                    android:paddingHorizontal="12dp"
+                    android:paddingVertical="10dp" />
+
+                <Button
+                    android:id="@+id/textSend"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:text="发送"
+                    android:textSize="12.5sp"
+                    android:textAllCaps="false"
+                    android:background="@drawable/primary"
+                    android:textColor="#031018" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text=""
+                android:textColor="#ffc857"
+                android:textSize="12sp"
+                android:paddingTop="14dp" />
+
+            <Button
+                android:id="@+id/pickFile"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="选择文件发送…"
+                android:textSize="14sp"
+                android:textAllCaps="false"
+                android:background="@drawable/primary"
+                android:textColor="#031018" />
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>

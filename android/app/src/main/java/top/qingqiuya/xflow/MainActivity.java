@@ -101,7 +101,7 @@ public class MainActivity extends Activity {
             xferChip.setBackground(bg);
             xferChip.setTextColor(0xFF7fd4ff);
         }
-        xferChip.setOnClickListener(v -> ShareDialog.show(this));
+        xferChip.setOnClickListener(v -> startActivity(new Intent(this, ShareActivity.class)));
         if (apiChip != null && apiChip.getParent() instanceof android.view.ViewGroup) {
             android.view.ViewGroup p = (android.view.ViewGroup) apiChip.getParent();
             int idx = p.indexOfChild(apiChip);
