@@ -50,6 +50,9 @@ func biliGetJSON(url string, out any) error {
 	}
 	req.Header.Set("User-Agent", biliUA)
 	req.Header.Set("Referer", "https://www.bilibili.com/")
+	if ck := BiliCookie(); ck != "" {
+		req.Header.Set("Cookie", ck)
+	}
 	resp, err := biliClient(20 * time.Second).Do(req)
 	if err != nil {
 		return err

@@ -271,6 +271,8 @@ func main() {
 	// 浏览器插件用的入口：带 Referer / Cookie 的下载请求。
 	// 插件在浏览器扩展上下文里 fetch 127.0.0.1，绕开 CORS 限制靠的是 host_permissions，
 	// 但预检还是会来，所以 withCORS 里也放了 Allow-Private-Network。
+	registerBiliLogin(mux)
+
 	mux.HandleFunc("/api/add", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			http.Error(w, "只收 POST", 405)

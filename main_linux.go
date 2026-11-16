@@ -185,6 +185,8 @@ func main() {
 
 	// 浏览器插件走这个（与 Windows 版同名同参）：插件只认 /api/add + url/name/referer/cookie
 	// ★ 2026-11-11：Linux 版原来只有 /api/jobs，插件一调就 404「汐流没接住」
+	registerBiliLogin(mux)
+
 	mux.HandleFunc("/api/add", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			http.Error(w, "只收 POST", 405)
