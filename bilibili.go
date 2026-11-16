@@ -62,10 +62,22 @@ func biliGetJSON(url string, out any) error {
 	return json.Unmarshal(body, out)
 }
 
-// IsBiliURL 判断是不是 B 站视频页。
+// IsBiliURL 判断是不是 B 站视频页（也认直接贴进来的 BV 号）。
 func IsBiliURL(src string) bool {
-	low := strings.ToLower(src)
-	return strings.Contains(low, "bilibili.com/video/") || strings.Contains(low, "b23.tv/")
+	low := strings.ToLower(strings.TrimSpace(src))
+	if strings.Contains(low, "bilibili.com/video/") || strings.Contains(low, "b23.tv/") {
+		return true
+	}
+	// 纯 BV 号：BV1GJ411x7h7 / bv1gj411x7h7
+	if len(low) == 12 && strings.HasPrefix(low, "bv") {
+		for _, c := range low[2:] {
+			if (c < '0' || c > '9') && (c < 'a' || c > 'z') {
+				return false
+			}
+		}
+		return true
+	}
+	return false
 }
 
 // resolveBvid 从各种 B 站链接里抠出 BV 号（b23.tv 短链先跟一次跳转）。

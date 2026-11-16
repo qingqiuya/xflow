@@ -301,6 +301,20 @@ func main() {
 		if name == "" {
 			name = fileNameFromURL(src)
 		}
+		// B 站（和通用视频站）走原生/yt-dlp，别当普通直链去下
+		if IsBiliURL(src) {
+			j := mgr.AddBili(src, d.Name, dir)
+			ensureWindow()
+			json.NewEncoder(w).Encode(map[string]any{"ok": true, "id": j.ID, "kind": "video"})
+			return
+		}
+		if IsVideoURL(src) {
+			j := mgr.AddVideo(src, d.Name, dir)
+			ensureWindow()
+			json.NewEncoder(w).Encode(map[string]any{"ok": true, "id": j.ID, "kind": "video"})
+			return
+		}
+
 		if strings.HasPrefix(src, "magnet:") || strings.HasSuffix(strings.ToLower(src), ".torrent") {
 			j := mgr.AddBT(src, orDefault(name, "BT 任务"), dir)
 			showTrayWindow()
@@ -686,3 +700,7 @@ func reloadView() {
 		mainView.Navigate(url)
 	})
 }
+
+// ensureWindow Windows 版本身就是窗口程序，不需要像 Linux 那样按需拉起窗口。
+// （main_linux.go 里那份是给 headless 模式用的，win 版只保留签名一致。）
+func ensureWindow() {}
