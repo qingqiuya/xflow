@@ -10,6 +10,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -119,6 +120,13 @@ func startVideo(j *Job) {
 	args := []string{
 		"--no-playlist",
 		"--newline",
+		// 强制 IPv4：B 站 CDN 的 IPv6 路径经常 SSL 断流（G55 上实测 v6 超时、v4 正常）
+		"-4",
+		// B 站的 mcdn 节点时不时卡住，超时别等 20 秒，快速重试换节点
+		"--socket-timeout", "15",
+		"--retries", "5",
+		"--fragment-retries", "10",
+		"--retry-sleep", "2",
 		"--no-colors",
 		"--progress",
 		"-o", outTmpl,
@@ -136,14 +144,11 @@ func startVideo(j *Job) {
 	// Windows 上不弹黑框
 	hideWindow(cmd)
 
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		j.State = "error"
-		j.Err = "起不了 yt-dlp：" + err.Error()
-		return
-	}
-	cmd.Stderr = cmd.Stdout // 进度有时写 stderr，合并读
-	sep := bufio.NewScanner(stdout)
+	// stdout 和 stderr 合并成一条流读（yt-dlp 的进度、警告都可能有）
+	pr, pw := io.Pipe()
+	cmd.Stdout = pw
+	cmd.Stderr = pw
+	sep := bufio.NewScanner(pr)
 	sep.Buffer(make([]byte, 64<<10), 1<<20)
 
 	var lastFile string
@@ -188,6 +193,7 @@ func startVideo(j *Job) {
 		return
 	}
 	waitErr := cmd.Wait()
+	pw.Close()
 	if ctx.Err() == context.Canceled {
 		j.State = "paused"
 		return
