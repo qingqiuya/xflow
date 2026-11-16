@@ -168,8 +168,6 @@ button:active{transform:scale(.97)}
     <span class="grow" style="flex:1"></span>
     <span id="shPend" style="color:var(--warn);font-size:12px"></span>
   </div>
-  <div class="dlg-q"><span id="shWhere" style="color:var(--dim)"></span></div>
-  <div class="dlg-list" id="shList"></div>
   <div class="dlg-q" style="gap:8px;align-items:center">
     <input id="shAddr" placeholder="手动加地址：10.11.11.147:17777 或 [240e:…]:17777" style="flex:1;padding:6px 9px;font-size:12.5px">
     <button class="mini" id="shAddrAdd">添加</button>
@@ -183,8 +181,7 @@ button:active{transform:scale(.97)}
     <button class="mini" id="shTextSend">发送</button>
   </div>
   <div class="dlg-ft">
-    <button class="ghost" id="shUp">上一级</button>
-    <input type="file" id="shFile" hidden><button class="ghost" id="shPick">上传到这里…</button>
+    <input type="file" id="shFile" multiple hidden><button class="primary" id="shPick">选择文件发送…</button>
     <span class="grow"></span>
     <span id="shMsg" style="color:var(--warn);font-size:12px"></span>
     <button class="ghost" id="shClose">回到下载</button>
@@ -269,8 +266,10 @@ async function shOpen(){
   const sel=document.getElementById('shDev');
   if(!shPeers.length){
     sel.innerHTML='<option>没发现别的设备</option>';
-    document.getElementById('shList').innerHTML='<div class="empty"><b>📡</b>同一局域网里另开一台 XFlow 就会出现</div>';
-    document.getElementById('shWhere').textContent='';
+    const _l=document.getElementById('shList');
+    if(_l) _l.innerHTML='<div class="empty"><b>📡</b>同一局域网里另开一台 XFlow 就会出现';
+    const _w=document.getElementById('shWhere');
+    if(_w) _w.textContent='';
     return;
   }
   sel.innerHTML=shPeers.map((p,i)=>'<option value="'+i+'">'+esc(p.name||p.ip)+' · '+esc(p.ip)+':'+p.port+'</option>').join('');
@@ -310,10 +309,11 @@ async function shBrowse(path){
   if(!shPeer) return;
   let d;
   try{ d=await shJ(shBase()+'/api/fs'+(path?('?path='+encodeURIComponent(path)):'')) }
-  catch(e){ document.getElementById('shList').innerHTML='<div class="empty">'+esc(e.message||String(e))+'</div>'; return }
-  if(!d.ok){ document.getElementById('shList').innerHTML='<div class="empty">'+esc(d.err||'打不开')+'</div>'; return }
+  catch(e){ const _l=document.getElementById('shList'); if(_l) _l.innerHTML='<div class="empty">'+esc(e.message||String(e))+'</div>'; return }
+  if(!d.ok){ const _l=document.getElementById('shList'); if(_l) _l.innerHTML='<div class="empty">'+esc(d.err||'打不开')+'</div>'; return }
   shPath=d.path;
-  document.getElementById('shWhere').textContent=shPeer.name+' 的 '+d.path+'　（收件目录：'+d.dir+'）';
+  const _w2=document.getElementById('shWhere');
+  if(_w2) _w2.textContent=shPeer.name+' 的 '+d.path+'　（收件目录：'+d.dir+'）';
   const sep=d.path.includes('\\')?'\\':'/';
   const rows=(d.items||[]).map(it=>{
     const full=d.path.replace(/[\\/]$/,'')+sep+it.name;
@@ -323,8 +323,10 @@ async function shBrowse(path){
       '<span style="color:var(--dim);font-size:12px">'+fs(it.size)+'</span>'+
       '<a href="'+dl+'" style="color:var(--acc);text-decoration:none;padding:0 6px">下载</a></div>';
   }).join('');
-  document.getElementById('shList').innerHTML=rows||'<div class="empty">空目录</div>';
-  document.getElementById('shList').querySelectorAll('[data-dir]').forEach(el=>{
+  const _l2=document.getElementById('shList');
+  if(!_l2) return;
+  _l2.innerHTML=rows||'<div class="empty">空目录</div>';
+  _l2.querySelectorAll('[data-dir]').forEach(el=>{
     el.onclick=()=>shBrowse(el.dataset.dir);
   });
   document.getElementById('shUp').disabled=!d.parent;
@@ -366,15 +368,20 @@ document.getElementById('shTokSave').onclick=()=>{
 };
 document.getElementById('shPick').onclick=()=>document.getElementById('shFile').click();
 document.getElementById('shFile').onchange=async e=>{
-  const f=e.target.files&&e.target.files[0]; if(!f) return;
+  const files=Array.from(e.target.files||[]); if(!files.length) return;
   const msg=document.getElementById('shMsg');
-  msg.textContent='上传中…';
-  const fd=new FormData(); fd.append('file',f);
-  try{
-    const r=await shJ(shBase()+'/api/upload?dir='+encodeURIComponent(shPath),{method:'POST',body:fd});
-    msg.textContent=r.ok?(r.pending?'已发送，等对方接收':'已传到对方 '+r.dir):('失败：'+(r.err||''));
-    if(r.ok) shBrowse(shPath);
-  }catch(err){ msg.textContent='失败：'+(err.message||err) }
+  let okN=0, lastErr='';
+  for(let i=0;i<files.length;i++){
+    msg.textContent='发送中 '+(i+1)+'/'+files.length+'：'+files[i].name;
+    const fd=new FormData(); fd.append('file',files[i]);
+    try{
+      const r=await shJ(shBase()+'/api/upload',{method:'POST',body:fd});
+      if(r.ok) okN++; else lastErr=r.err||'';
+    }catch(err){ lastErr=err.message||String(err) }
+  }
+  msg.textContent = okN===files.length
+    ? ('已发送 '+okN+' 个文件到对方收件目录')
+    : ('发了 '+okN+'/'+files.length+' 个'+(lastErr?('，最后一个失败：'+lastErr):''));
   e.target.value='';
 };
 // 剪贴板 / 文本：本机浏览器剪贴板 ↔ 对方
