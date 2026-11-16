@@ -145,44 +145,11 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:layout_marginStart="8dp"
-                    android:text="取对方剪贴板"
+                    android:text="发送文本"
                     android:textSize="12.5sp"
                     android:textAllCaps="false"
                     android:background="@drawable/chip"
                     android:textColor="#e8ebf2" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:paddingTop="8dp">
-
-                <TextView
-                    android:id="@+id/textInput"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="点这里输入文字…"
-                    android:textSize="12.5sp"
-                    android:gravity="center_vertical"
-                    android:minHeight="46dp"
-                    android:textColor="#8b93a7"
-                    android:background="@drawable/field"
-                    android:paddingHorizontal="12dp"
-                    android:paddingVertical="10dp" />
-
-                <Button
-                    android:id="@+id/textSend"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="8dp"
-                    android:text="发送"
-                    android:textSize="12.5sp"
-                    android:textAllCaps="false"
-                    android:background="@drawable/primary"
-                    android:textColor="#031018" />
             </LinearLayout>
 
             <TextView

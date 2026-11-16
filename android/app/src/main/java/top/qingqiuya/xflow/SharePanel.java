@@ -56,7 +56,6 @@ public class SharePanel {
     private LinearLayout devicesBox, inboxBox;
     private TextView targetText, status, selfTag;
     private EditText addrInput;
-    private TextView textInput;
     private String lastDevSig = "";
 
     private final Activity act;
@@ -73,15 +72,12 @@ public class SharePanel {
         status = root.findViewById(R.id.status);
         selfTag = root.findViewById(R.id.selfTag);
         addrInput = root.findViewById(R.id.addrInput);
-        textInput = root.findViewById(R.id.textInput);
 
         root.findViewById(R.id.addrAdd).setOnClickListener(v -> addManual());
         root.findViewById(R.id.pickFile).setOnClickListener(v -> pickFile());
         root.findViewById(R.id.clipSend).setOnClickListener(v -> sendMyClipboard());
-        root.findViewById(R.id.clipGet).setOnClickListener(v -> getPeerClipboard());
-        root.findViewById(R.id.textSend).setOnClickListener(v -> showTextDialog());
+        root.findViewById(R.id.clipGet).setOnClickListener(v -> showTextDialog());
 
-        textInput.setOnClickListener(v -> showTextDialog());
         addrInput.setOnFocusChangeListener((v, has) -> {
             if (has) ensureVisible(v);
         });
@@ -443,7 +439,7 @@ public class SharePanel {
                 int code = httpCode("POST", url, body, tokOf(t.ip));
                 ui.post(() -> {
                     say(code == 200 ? ("已发送 " + text.length() + " 字") : ("失败：对面返回 " + code));
-                    if (code == 200 && clearInput) textInput.setText("");
+                    // 发完不用清页面输入框（已经改成对话框了）
                 });
             } catch (Exception e) {
                 ui.post(() -> say("失败：" + e.getMessage()));
