@@ -401,6 +401,8 @@ func main() {
 		// 局域网发现（mDNS）：注册自己 + 浏览手机等设备
 		startDiscovery(*port, needTok)
 		defer stopDiscovery()
+		// 互传（汐港搬过来的）：/api/fs /api/download /api/upload /api/send /api/incoming /api/share
+		registerShare(mux)
 		if err := http.Serve(ln, withCORS(guardMux(mux, needTok))); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)

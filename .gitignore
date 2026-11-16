@@ -9,3 +9,6 @@ dist/
 *.aar
 android/build/
 android/app/src/main/assets/
+*.exe
+xflow-linux
+xflow-win.exe

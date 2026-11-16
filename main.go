@@ -531,6 +531,8 @@ func main() {
 	os.WriteFile(filepath.Join(home, ".localdl-port"), []byte(strconv.Itoa(port)), 0644)
 	needTok := loadSettings().Listen == "lan"
 	setAPIListener(ln, mux)
+	// 互传（汐港搬过来的）：/api/fs /api/download /api/upload /api/send /api/incoming /api/share
+	registerShare(mux)
 	go http.Serve(ln, withCORS(guardMux(mux, needTok)))
 	startDiscovery(port, needTok)
 	defer stopDiscovery()
