@@ -104,7 +104,7 @@ public class MainActivity extends Activity {
                         if (e1 == null || e2 == null) return false;
                         float dx = e2.getX() - e1.getX();
                         float dy = e2.getY() - e1.getY();
-                        if (Math.abs(dx) > 110 && Math.abs(dx) > Math.abs(dy) * 1.5f) {
+                        if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.2f) {
                             showPage(dx < 0 ? 1 : 0);
                             return true;
                         }
@@ -931,15 +931,13 @@ public class MainActivity extends Activity {
         return "*/*";
     }
 
-    /** 切页：0 下载 / 1 互传 */
+    /** 切页：0 下载 / 1 互传。带滑动 + 淡入淡出。 */
     private void showPage(int idx) {
-        curPage = idx;
-        View pd = findViewById(R.id.pageDownload);
-        View ps = findViewById(R.id.pageShare);
+        final View pd = findViewById(R.id.pageDownload);
+        final View ps = findViewById(R.id.pageShare);
         TextView td = findViewById(R.id.tabDownload);
         TextView ts = findViewById(R.id.tabShare);
-        if (pd != null) pd.setVisibility(idx == 0 ? View.VISIBLE : View.GONE);
-        if (ps != null) ps.setVisibility(idx == 1 ? View.VISIBLE : View.GONE);
+
         if (td != null) {
             td.setTextColor(idx == 0 ? 0xFFe8ebf2 : 0xFF6b7385);
             td.setTypeface(null, idx == 0 ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
@@ -948,6 +946,44 @@ public class MainActivity extends Activity {
             ts.setTextColor(idx == 1 ? 0xFFe8ebf2 : 0xFF6b7385);
             ts.setTypeface(null, idx == 1 ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
         }
+        if (pd == null || ps == null) return;
+
+        final View in = idx == 0 ? pd : ps;
+        final View out = idx == 0 ? ps : pd;
+        if (idx == curPage && in.getVisibility() == View.VISIBLE) return;
+        int dir = idx == 1 ? 1 : -1;      // 往互传滑 = 从右边进；往下载滑 = 从左边进
+        final int shift = dp(34);
+
+        android.view.animation.Interpolator ease =
+                new android.view.animation.DecelerateInterpolator();
+
+        // 旧页：反向滑一点 + 淡出，结束后藏起来并复位
+        out.animate().cancel();
+        if (out.getVisibility() == View.VISIBLE) {
+            out.animate().translationX(-dir * shift).alpha(0f).setDuration(170)
+                    .setInterpolator(ease)
+                    .withEndAction(() -> {
+                        out.setVisibility(View.GONE);
+                        out.setTranslationX(0f);
+                        out.setAlpha(1f);
+                    })
+                    .start();
+        } else {
+            out.setVisibility(View.GONE);
+            out.setTranslationX(0f);
+            out.setAlpha(1f);
+        }
+
+        // 新页：从另一侧滑进来 + 淡入
+        in.animate().cancel();
+        in.setVisibility(View.VISIBLE);
+        in.setTranslationX(dir * shift);
+        in.setAlpha(0f);
+        in.animate().translationX(0f).alpha(1f).setDuration(210)
+                .setInterpolator(ease)
+                .start();
+
+        curPage = idx;
     }
 
     @Override
