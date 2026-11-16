@@ -49,25 +49,62 @@ public class ShareDialog {
 
     public static void show(Activity act) {
         activityRef = act;
-        List<Beacon.Peer> peers = new ArrayList<>(Beacon.PEERS.values());
-        if (peers.isEmpty()) {
-            new AlertDialog.Builder(act, R.style.DarkDialog)
-                    .setTitle("互传")
-                    .setMessage("还没发现别的设备。\n\n同一局域网里另开一台 XFlow（电脑或另一台手机）就会出现。")
-                    .setPositiveButton("知道了", null)
-                    .show();
-            return;
-        }
-        String[] names = new String[peers.size()];
-        for (int i = 0; i < peers.size(); i++) {
-            Beacon.Peer p = peers.get(i);
-            names[i] = p.name + "\n" + p.ip + ":" + p.port;
-        }
-        new AlertDialog.Builder(act, R.style.DarkDialog)
-                .setTitle("发给哪台设备")
-                .setItems(names, (d, which) -> openPanel(act, peers.get(which)))
-                .setNegativeButton("取消", null)
-                .show();
+
+        LinearLayout box = new LinearLayout(act);
+        box.setOrientation(LinearLayout.VERTICAL);
+        int pad = dp(act, 18);
+        box.setPadding(pad, pad, pad, pad);
+        box.setBackgroundColor(Color.parseColor("#12151c"));
+
+        TextView hint = new TextView(act);
+        hint.setText("正在搜寻（自动刷新，不用等）");
+        hint.setTextSize(12.5f);
+        hint.setTextColor(Color.parseColor("#8b93a7"));
+        box.addView(hint);
+
+        LinearLayout listBox = new LinearLayout(act);
+        listBox.setOrientation(LinearLayout.VERTICAL);
+        box.addView(listBox);
+
+        AlertDialog dlg = new AlertDialog.Builder(act, R.style.DarkDialog)
+                .setView(box)
+                .setNegativeButton("关闭", null)
+                .create();
+        dlg.show();
+
+        // 每 1.5 秒看一次 Beacon.PEERS：设备出现/消失都跟着变，不用重开 App
+        final String[] last = {""};
+        Runnable[] tick = new Runnable[1];
+        tick[0] = () -> {
+            if (!dlg.isShowing() || activityRef == null) return;
+            List<Beacon.Peer> peers = new ArrayList<>(Beacon.PEERS.values());
+            StringBuilder sig = new StringBuilder();
+            for (Beacon.Peer p : peers) sig.append(p.ip).append(':').append(p.port).append(',');
+            if (!sig.toString().equals(last[0])) {
+                last[0] = sig.toString();
+                listBox.removeAllViews();
+                if (peers.isEmpty()) {
+                    TextView empty = new TextView(act);
+                    empty.setText("还没发现别的设备。\n同一局域网里另开一台 XFlow（电脑或另一台手机）就会出现。");
+                    empty.setTextSize(13);
+                    empty.setTextColor(Color.parseColor("#8b93a7"));
+                    listBox.addView(empty);
+                } else {
+                    for (Beacon.Peer p : peers) {
+                        Button b = mkButton(act, p.name + "\n" + p.ip + ":" + p.port);
+                        b.setOnClickListener(v -> {
+                            dlg.dismiss();
+                            openPanel(act, p);
+                        });
+                        listBox.addView(b);
+                    }
+                }
+                hint.setText(peers.isEmpty() ? "正在搜寻（自动刷新，不用等）"
+                        : ("发现 " + peers.size() + " 台设备，点一个开始传"));
+            }
+            UI.postDelayed(tick[0], 1500);
+        };
+        UI.postDelayed(tick[0], 300);
     }
 
     private static void openPanel(Activity act, Beacon.Peer peer) {

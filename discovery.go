@@ -50,6 +50,42 @@ func discoveryName() string {
 	return "XFlow@" + host
 }
 
+
+// primaryIfaces 找出承载主 IPv4 的那个网卡（跳过 172./100./169.254. 这类虚拟/旁路地址）。
+// 找不到就返回 nil（交给库播所有网卡）。
+func primaryIfaces() []net.Interface {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return nil
+	}
+	all, err := net.Interfaces()
+	if err != nil {
+		return nil
+	}
+	for _, a := range addrs {
+		ipn, ok := a.(*net.IPNet)
+		if !ok || ipn.IP.IsLoopback() || ipn.IP.To4() == nil {
+			continue
+		}
+		s := ipn.IP.To4().String()
+		if strings.HasPrefix(s, "172.") || strings.HasPrefix(s, "100.") || strings.HasPrefix(s, "169.254.") {
+			continue
+		}
+		for _, ifc := range all {
+			ifiaddrs, e := ifc.Addrs()
+			if e != nil {
+				continue
+			}
+			for _, ia := range ifiaddrs {
+				if ia.String() == ipn.String() {
+					return []net.Interface{ifc}
+				}
+			}
+		}
+	}
+	return nil
+}
+
 // startDiscovery 注册自己 + 浏览别人。端口是 HTTP API 实际监听的那个。
 func startDiscovery(port int, lan bool) {
 	if !lan {
@@ -57,8 +93,10 @@ func startDiscovery(port int, lan bool) {
 		// 还是注册上，方便别的主机知道这台机器的存在但连不上时能提示
 	}
 	name := discoveryName()
+	// 只往主网卡注册：多网卡机器（G55 有 docker/旁路口的 172.16.x）如果全播出去，
+	// 手机端 NsdManager 解析时经常挑到那个连不上的地址。nil = 全部接口。
 	srv, err := zeroconf.Register(name, xflowService, "local.", port,
-		[]string{"platform=" + platformTag(), "ver=" + Version}, nil)
+		[]string{"platform=" + platformTag(), "ver=" + Version}, primaryIfaces())
 	if err == nil {
 		peerServer = srv
 		fmt.Printf("[发现] 已注册 mDNS: %s port=%d\n", name, port)
