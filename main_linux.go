@@ -221,6 +221,12 @@ func main() {
 			json.NewEncoder(w).Encode(map[string]any{"ok": true, "id": j.ID})
 			return
 		}
+		if IsBiliURL(src) {
+			j := mgr.AddBili(src, d.Name, dir)
+			ensureWindow()
+			json.NewEncoder(w).Encode(map[string]any{"ok": true, "id": j.ID, "kind": "video"})
+			return
+		}
 		if IsVideoURL(src) {
 			j := mgr.AddVideo(src, d.Name, dir)
 			ensureWindow()

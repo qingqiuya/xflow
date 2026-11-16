@@ -253,8 +253,11 @@ func main() {
 			switch {
 			case strings.HasPrefix(src, "magnet:") || strings.HasSuffix(strings.ToLower(src), ".torrent"):
 				mgr.AddBT(src, orDefault(d.Name, "BT 任务"), dir)
+			case IsBiliURL(src):
+				// B 站：自己解析 playurl + 多候选探测 + 双流下载 + ffmpeg 合并
+				mgr.AddBili(src, d.Name, dir)
 			case IsVideoURL(src):
-				// 视频页（B 站/YouTube…）：交给 yt-dlp，解析+合并它自己搞定
+				// 其他视频站（YouTube…）：交给 yt-dlp
 				mgr.AddVideo(src, d.Name, dir)
 			default:
 				mgr.AddHTTP(src, orDefault(d.Name, fileNameFromURL(src)), dir, d.Segs)
