@@ -34,6 +34,7 @@ public class MainActivity extends Activity {
     private EditText urlEdit, nameEdit;
     private ApiServer api;
     private Beacon beacon;
+    private SharePanel sharePanel;
     private LinearLayout jobList;
     private TextView statText;
     private final Handler ui = new Handler(Looper.getMainLooper());
@@ -101,7 +102,12 @@ public class MainActivity extends Activity {
             xferChip.setBackground(bg);
             xferChip.setTextColor(0xFF7fd4ff);
         }
-        xferChip.setOnClickListener(v -> startActivity(new Intent(this, ShareActivity.class)));
+        xferChip.setOnClickListener(v -> {
+            // 页面合一了：滚到下面的互传区块
+            View panel = findViewById(R.id.sharePanel);
+            final android.widget.ScrollView sv = findViewById(R.id.jobScroll);
+            if (panel != null && sv != null) sv.smoothScrollTo(0, panel.getTop());
+        });
         if (apiChip != null && apiChip.getParent() instanceof android.view.ViewGroup) {
             android.view.ViewGroup p = (android.view.ViewGroup) apiChip.getParent();
             int idx = p.indexOfChild(apiChip);
@@ -113,6 +119,12 @@ public class MainActivity extends Activity {
         }
         // 短按：没开就开；已经开了就看说明（避免手滑关掉）
         // 长按：切换开关
+        {
+            View panel = findViewById(R.id.sharePanel);
+            if (panel != null) {
+                sharePanel = new SharePanel(this, panel);
+            }
+        }
         apiChip.setOnClickListener(v -> {
             if (!api.isRunning()) {
                 api.start(ApiServer.DEFAULT_PORT);
@@ -545,7 +557,7 @@ public class MainActivity extends Activity {
     protected void onActivityResult(int req, int res, Intent data) {
         super.onActivityResult(req, res, data);
         if (req != REQ_TORRENT) {
-            ShareDialog.onPickResult(req, res, data); // 互传选完文件
+            if (sharePanel != null) sharePanel.onPickResult(req, res, data); // 互传选完文件
             return;
         }
         if (res != RESULT_OK || data == null || data.getData() == null) return;

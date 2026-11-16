@@ -217,6 +217,9 @@
                 android:orientation="vertical"
                 android:visibility="gone"
                 android:layout_marginTop="14dp" />
+
+            <!-- 互传区块（跟下载任务同一个滚动页面） -->
+            <include layout="@layout/share_panel" />
         </LinearLayout>
     </ScrollView>
     </LinearLayout>
