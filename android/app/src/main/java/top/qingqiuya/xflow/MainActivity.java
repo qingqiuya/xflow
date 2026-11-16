@@ -36,6 +36,7 @@ public class MainActivity extends Activity {
     private Beacon beacon;
     private SharePanel sharePanel;
     private int curPage = 0;
+    private boolean shareTabOn = true;
     private LinearLayout jobList;
     private TextView statText;
     private final Handler ui = new Handler(Looper.getMainLooper());
@@ -989,8 +990,9 @@ public class MainActivity extends Activity {
 
     /** 松手/点页签后吸附到某一页。 */
     private void animateToPage(final int page) {
-        final float target = page == 1 ? 1f : 0f;
-        setTabStyle(page);
+        final int want = (page == 1 && !shareTabOn) ? 0 : page;
+        final float target = want == 1 ? 1f : 0f;
+        setTabStyle(want);
         if (pageAnim != null) pageAnim.cancel();
         pageAnim = android.animation.ValueAnimator.ofFloat(pageProgress, target);
         pageAnim.setDuration((long) (150 + 140 * Math.abs(target - pageProgress)));
@@ -1071,7 +1073,9 @@ public class MainActivity extends Activity {
                 }
                 if (pagerW == 0) break;
                 float p = startProgress - dx / (float) pagerW;
-                pageProgress = Math.max(0f, Math.min(1f, p));
+                p = Math.max(0f, Math.min(1f, p));
+                if (!shareTabOn && p > 0f) p = p * 0.12f;  // 互传关了：滑不动，只给一点回弹
+                pageProgress = p;
                 applyProgress(pageProgress);
                 return true; // 跟手阶段把事件吃掉
             }
@@ -1087,6 +1091,7 @@ public class MainActivity extends Activity {
                 int target = (p >= 0.5f) ? 1 : 0;
                 if (dx < 0 && p > 0.34f) target = 1;
                 if (dx > 0 && p < 0.66f) target = 0;
+                if (!shareTabOn) target = 0;   // 互传关着就不许停在那一页
                 animateToPage(target);
                 return true;
             }
@@ -1103,6 +1108,7 @@ public class MainActivity extends Activity {
 
     /** 关掉互传时把互传页签藏起来。 */
     private void applyShareTab(boolean on) {
+        shareTabOn = on;
         TextView tab = findViewById(R.id.tabShare);
         if (tab != null) tab.setVisibility(on ? View.VISIBLE : View.GONE);
     }
