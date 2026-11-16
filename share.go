@@ -205,7 +205,32 @@ func registerShare(mux *http.ServeMux) {
 
 	mux.HandleFunc("/api/upload", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
-			writeShareJSON(w, map[string]any{"ok": false, "err": "要 POST multipart"})
+			writeShareJSON(w, map[string]any{"ok": false, "err": "要 POST"})
+			return
+		}
+		// 两种口味：
+		//   ① multipart/form-data（桌面 → 桌面，字段名 file）
+		//   ② 裸 body + X-File-Name 头（手机端用这个 —— 它那套手写 HTTP 处理不了 multipart）
+		if nm := r.Header.Get("X-File-Name"); nm != "" {
+			dir := r.URL.Query().Get("dir")
+			if dir == "" || !underAllowed(dir) {
+				dir = shareRecvDir()
+			}
+			os.MkdirAll(dir, 0o755)
+			dst := filepath.Join(dir, filepath.Base(nm))
+			out, err := os.Create(dst)
+			if err != nil {
+				writeShareJSON(w, map[string]any{"ok": false, "err": err.Error()})
+				return
+			}
+			n, err := io.Copy(out, r.Body)
+			out.Close()
+			if err != nil {
+				os.Remove(dst)
+				writeShareJSON(w, map[string]any{"ok": false, "err": err.Error()})
+				return
+			}
+			writeShareJSON(w, map[string]any{"ok": true, "saved": []string{dst}, "size": n, "dir": dir})
 			return
 		}
 		dir := r.URL.Query().Get("dir")
@@ -266,6 +291,38 @@ func registerShare(mux *http.ServeMux) {
 		st, _ := f.Stat()
 		if st == nil || st.IsDir() {
 			writeShareJSON(w, map[string]any{"ok": false, "err": "只能发文件，目录以后再说"})
+			return
+		}
+		// ?raw=1 → 裸 body + X-File-Name（发给手机端用；手机那套手写 HTTP 不解析 multipart）
+		if r.URL.Query().Get("raw") == "1" {
+			url := "http://" + peer + "/api/upload"
+			if t := r.URL.Query().Get("token"); t != "" {
+				url += "?token=" + t
+			}
+			req, err := http.NewRequest(http.MethodPost, url, f)
+			if err != nil {
+				writeShareJSON(w, map[string]any{"ok": false, "err": err.Error()})
+				return
+			}
+			req.ContentLength = st.Size()
+			req.Header.Set("Content-Type", "application/octet-stream")
+			req.Header.Set("X-File-Name", filepath.Base(p))
+			if t := r.URL.Query().Get("token"); t != "" {
+				req.Header.Set("X-API-Token", t)
+			}
+			client := &http.Client{Timeout: 0}
+			resp, err := client.Do(req)
+			if err != nil {
+				writeShareJSON(w, map[string]any{"ok": false, "err": err.Error()})
+				return
+			}
+			defer resp.Body.Close()
+			body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+			if resp.StatusCode != 200 {
+				writeShareJSON(w, map[string]any{"ok": false, "err": fmt.Sprintf("对方返回 %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))})
+				return
+			}
+			writeShareJSON(w, map[string]any{"ok": true, "peer": peer, "size": st.Size(), "raw": true, "reply": strings.TrimSpace(string(body))})
 			return
 		}
 		pr, pw := io.Pipe()
