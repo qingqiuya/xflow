@@ -51,7 +51,7 @@ public class ShareDialog {
         activityRef = act;
         List<Beacon.Peer> peers = new ArrayList<>(Beacon.PEERS.values());
         if (peers.isEmpty()) {
-            new AlertDialog.Builder(act)
+            new AlertDialog.Builder(act, R.style.DarkDialog)
                     .setTitle("互传")
                     .setMessage("还没发现别的设备。\n\n同一局域网里另开一台 XFlow（电脑或另一台手机）就会出现。")
                     .setPositiveButton("知道了", null)
@@ -63,7 +63,7 @@ public class ShareDialog {
             Beacon.Peer p = peers.get(i);
             names[i] = p.name + "\n" + p.ip + ":" + p.port;
         }
-        new AlertDialog.Builder(act)
+        new AlertDialog.Builder(act, R.style.DarkDialog)
                 .setTitle("发给哪台设备")
                 .setItems(names, (d, which) -> openPanel(act, peers.get(which)))
                 .setNegativeButton("取消", null)
@@ -146,7 +146,7 @@ public class ShareDialog {
         box.addView(sendClip);
         box.addView(getClip);
 
-        AlertDialog dlg = new AlertDialog.Builder(act)
+        AlertDialog dlg = new AlertDialog.Builder(act, R.style.DarkDialog)
                 .setView(box)
                 .setNegativeButton("关闭", null)
                 .create();
