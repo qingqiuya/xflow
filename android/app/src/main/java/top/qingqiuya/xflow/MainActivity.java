@@ -88,6 +88,29 @@ public class MainActivity extends Activity {
         // 不加任务不动数据，所以不用等用户点开关
         beacon.start(ApiServer.DEFAULT_PORT);
         paintApiChip(apiChip, apiOn);
+        // 「互传」入口：动态插在 API 旁边，不动布局 XML
+        TextView xferChip = new TextView(this);
+        xferChip.setText("互传");
+        xferChip.setTextSize(13);
+        xferChip.setPadding(dp(12), dp(7), dp(12), dp(7));
+        {
+            android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+            bg.setColor(0xFF1a222e);
+            bg.setCornerRadius(dp(9));
+            bg.setStroke(dp(1), 0xFF2b3444);
+            xferChip.setBackground(bg);
+            xferChip.setTextColor(0xFF7fd4ff);
+        }
+        xferChip.setOnClickListener(v -> ShareDialog.show(this));
+        if (apiChip != null && apiChip.getParent() instanceof android.view.ViewGroup) {
+            android.view.ViewGroup p = (android.view.ViewGroup) apiChip.getParent();
+            int idx = p.indexOfChild(apiChip);
+            android.view.ViewGroup.LayoutParams lp = apiChip.getLayoutParams();
+            android.view.ViewGroup.MarginLayoutParams mlp = new android.view.ViewGroup.MarginLayoutParams(lp);
+            mlp.rightMargin = dp(8);
+            xferChip.setLayoutParams(mlp);
+            p.addView(xferChip, Math.max(0, idx), lp);
+        }
         // 短按：没开就开；已经开了就看说明（避免手滑关掉）
         // 长按：切换开关
         apiChip.setOnClickListener(v -> {
@@ -521,7 +544,11 @@ public class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int req, int res, Intent data) {
         super.onActivityResult(req, res, data);
-        if (req != REQ_TORRENT || res != RESULT_OK || data == null || data.getData() == null) return;
+        if (req != REQ_TORRENT) {
+            ShareDialog.onPickResult(req, res, data); // 互传选完文件
+            return;
+        }
+        if (res != RESULT_OK || data == null || data.getData() == null) return;
         Uri uri = data.getData();
         try {
             File dir = new File(getCacheDir(), "torrent");

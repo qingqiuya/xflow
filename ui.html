@@ -142,6 +142,12 @@ button:active{transform:scale(.97)}
   </div>
   <div class="dlg-q"><span id="shWhere" style="color:var(--dim)"></span></div>
   <div class="dlg-list" id="shList"></div>
+  <div class="dlg-q" style="gap:8px">
+    <button class="mini" id="shClipSend" title="把本机剪贴板发到对方">📋 发剪贴板</button>
+    <button class="mini" id="shClipGet" title="把对方剪贴板取过来">📥 取剪贴板</button>
+    <input id="shText" placeholder="或直接打一段文字发过去" style="flex:1;padding:6px 9px;font-size:12.5px">
+    <button class="mini" id="shTextSend">发送</button>
+  </div>
   <div class="dlg-ft">
     <button class="ghost" id="shUp">上一级</button>
     <input type="file" id="shFile" hidden><button class="ghost" id="shPick">上传到这里…</button>
@@ -242,6 +248,42 @@ document.getElementById('shFile').onchange=async e=>{
   }catch(err){ msg.textContent='失败：'+(err.message||err) }
   e.target.value='';
 };
+// 剪贴板 / 文本：本机浏览器剪贴板 ↔ 对方
+function shMsgShow(t){ document.getElementById('shMsg').textContent = t; }
+async function shSendText(t){
+  if(!shPeer) return;
+  if(!t){ shMsgShow('没有内容'); return }
+  try{
+    const r=await shJ(shBase()+'/api/clipboard',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t})});
+    shMsgShow(r.ok?('已发送 '+t.length+' 字'):('失败：'+(r.err||'')));
+  }catch(e){ shMsgShow('失败：'+(e.message||e)) }
+}
+async function shFetchText(){
+  if(!shPeer) return null;
+  try{ return await shJ(shBase()+'/api/clipboard') }catch(e){ shMsgShow('失败：'+(e.message||e)); return null }
+}
+document.getElementById('shClipSend').onclick=async()=>{
+  let t='';
+  try{ t=await navigator.clipboard.readText() }catch(e){}
+  if(!t){ t=prompt('读不到本机剪贴板（浏览器限制），粘在这儿发出去：','')||'' }
+  await shSendText(t);
+};
+document.getElementById('shClipGet').onclick=async()=>{
+  const r=await shFetchText();
+  if(!r) return;
+  if(!r.ok){ shMsgShow('失败：'+(r.err||'')); return }
+  const t=r.text||'';
+  try{ await navigator.clipboard.writeText(t); shMsgShow('已复制到本机剪贴板（'+t.length+' 字）') }
+  catch(e){ prompt('对方剪贴板里的内容，手动复制：', t) }
+};
+document.getElementById('shTextSend').onclick=async()=>{
+  const el=document.getElementById('shText');
+  await shSendText(el.value);
+  el.value='';
+};
+document.getElementById('shText').addEventListener('keydown',e=>{
+  if(e.key==='Enter'){ e.preventDefault(); document.getElementById('shTextSend').click(); }
+});
 async function load(){
   const d=await (await fetch('/api/jobs')).json();
   const js=d.jobs||[];
