@@ -69,6 +69,48 @@
             android:paddingVertical="4dp" />
     </LinearLayout>
 
+    <!-- 页签：下载 / 互传（左右滑也能切） -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="18dp"
+        android:paddingBottom="12dp">
+
+        <TextView
+            android:id="@+id/tabDownload"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="下载"
+            android:textColor="#e8ebf2"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:paddingVertical="6dp" />
+
+        <TextView
+            android:id="@+id/tabShare"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="互传"
+            android:textColor="#6b7385"
+            android:textSize="15sp"
+            android:paddingVertical="6dp"
+            android:layout_marginStart="20dp" />
+    </LinearLayout>
+
+    <FrameLayout
+        android:id="@+id/pager"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+    <LinearLayout
+        android:id="@+id/pageDownload"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
     <!-- 输入卡片 -->
     <LinearLayout
         android:layout_width="match_parent"
@@ -217,10 +259,27 @@
                 android:orientation="vertical"
                 android:visibility="gone"
                 android:layout_marginTop="14dp" />
-
-            <!-- 互传区块（跟下载任务同一个滚动页面） -->
-            <include layout="@layout/share_panel" />
         </LinearLayout>
     </ScrollView>
+    </LinearLayout><!-- /pageDownload -->
+
+    <ScrollView
+        android:id="@+id/pageShare"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone"
+        android:fillViewport="true"
+        android:scrollbars="none"
+        android:paddingHorizontal="16dp"
+        android:paddingBottom="16dp">
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <include layout="@layout/share_panel" />
+        </FrameLayout>
+    </ScrollView>
+    </FrameLayout><!-- /pager -->
     </LinearLayout>
 </FrameLayout>

@@ -35,6 +35,8 @@ public class MainActivity extends Activity {
     private ApiServer api;
     private Beacon beacon;
     private SharePanel sharePanel;
+    private android.view.GestureDetector gestureDetector;
+    private int curPage = 0;
     private LinearLayout jobList;
     private TextView statText;
     private final Handler ui = new Handler(Looper.getMainLooper());
@@ -89,41 +91,31 @@ public class MainActivity extends Activity {
         // 不加任务不动数据，所以不用等用户点开关
         beacon.start(ApiServer.DEFAULT_PORT);
         paintApiChip(apiChip, apiOn);
-        // 「互传」入口：动态插在 API 旁边，不动布局 XML
-        TextView xferChip = new TextView(this);
-        xferChip.setText("互传");
-        xferChip.setTextSize(13);
-        xferChip.setPadding(dp(12), dp(7), dp(12), dp(7));
-        {
-            android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
-            bg.setColor(0xFF1a222e);
-            bg.setCornerRadius(dp(9));
-            bg.setStroke(dp(1), 0xFF2b3444);
-            xferChip.setBackground(bg);
-            xferChip.setTextColor(0xFF7fd4ff);
-        }
-        xferChip.setOnClickListener(v -> {
-            // 页面合一了：滚到下面的互传区块
-            View panel = findViewById(R.id.sharePanel);
-            final android.widget.ScrollView sv = findViewById(R.id.jobScroll);
-            if (panel != null && sv != null) sv.smoothScrollTo(0, panel.getTop());
-        });
-        if (apiChip != null && apiChip.getParent() instanceof android.view.ViewGroup) {
-            android.view.ViewGroup p = (android.view.ViewGroup) apiChip.getParent();
-            int idx = p.indexOfChild(apiChip);
-            android.view.ViewGroup.LayoutParams lp = apiChip.getLayoutParams();
-            android.view.ViewGroup.MarginLayoutParams mlp = new android.view.ViewGroup.MarginLayoutParams(lp);
-            mlp.rightMargin = dp(8);
-            xferChip.setLayoutParams(mlp);
-            p.addView(xferChip, Math.max(0, idx), lp);
-        }
-        // 短按：没开就开；已经开了就看说明（避免手滑关掉）
-        // 长按：切换开关
+        // 两页：下载 / 互传（点页签或左右滑）
+        TextView tabDownload = findViewById(R.id.tabDownload);
+        TextView tabShare = findViewById(R.id.tabShare);
+        if (tabDownload != null) tabDownload.setOnClickListener(v -> showPage(0));
+        if (tabShare != null) tabShare.setOnClickListener(v -> showPage(1));
+        gestureDetector = new android.view.GestureDetector(this,
+                new android.view.GestureDetector.SimpleOnGestureListener() {
+                    @Override
+                    public boolean onFling(android.view.MotionEvent e1, android.view.MotionEvent e2,
+                                           float vx, float vy) {
+                        if (e1 == null || e2 == null) return false;
+                        float dx = e2.getX() - e1.getX();
+                        float dy = e2.getY() - e1.getY();
+                        if (Math.abs(dx) > 110 && Math.abs(dx) > Math.abs(dy) * 1.5f) {
+                            showPage(dx < 0 ? 1 : 0);
+                            return true;
+                        }
+                        return false;
+                    }
+                });
+        showPage(0);
+        // 互传面板挂上（两页都在同一棵树里，先把 listener 装好）
         {
             View panel = findViewById(R.id.sharePanel);
-            if (panel != null) {
-                sharePanel = new SharePanel(this, panel);
-            }
+            if (panel != null) sharePanel = new SharePanel(this, panel);
         }
         apiChip.setOnClickListener(v -> {
             if (!api.isRunning()) {
@@ -937,6 +929,31 @@ public class MainActivity extends Activity {
         if (n.endsWith(".apk")) return "application/vnd.android.package-archive";
         if (n.endsWith(".zip")) return "application/zip";
         return "*/*";
+    }
+
+    /** 切页：0 下载 / 1 互传 */
+    private void showPage(int idx) {
+        curPage = idx;
+        View pd = findViewById(R.id.pageDownload);
+        View ps = findViewById(R.id.pageShare);
+        TextView td = findViewById(R.id.tabDownload);
+        TextView ts = findViewById(R.id.tabShare);
+        if (pd != null) pd.setVisibility(idx == 0 ? View.VISIBLE : View.GONE);
+        if (ps != null) ps.setVisibility(idx == 1 ? View.VISIBLE : View.GONE);
+        if (td != null) {
+            td.setTextColor(idx == 0 ? 0xFFe8ebf2 : 0xFF6b7385);
+            td.setTypeface(null, idx == 0 ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
+        }
+        if (ts != null) {
+            ts.setTextColor(idx == 1 ? 0xFFe8ebf2 : 0xFF6b7385);
+            ts.setTypeface(null, idx == 1 ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
+        }
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(android.view.MotionEvent ev) {
+        if (gestureDetector != null) gestureDetector.onTouchEvent(ev);
+        return super.dispatchTouchEvent(ev);
     }
 
     private int dp(int v) {
