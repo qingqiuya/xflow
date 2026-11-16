@@ -136,7 +136,7 @@
             android:id="@+id/urlEdit"
             android:layout_width="match_parent"
             android:layout_height="50dp"
-            android:hint="粘贴链接（直链 / 磁力 / B站视频 / .torrent）"
+            android:hint="粘贴链接或 BV 号（直链 / 磁力 / B站 / .torrent）"
             android:textColorHint="#5b6478"
             android:textColor="#e8ebf2"
             android:textSize="14sp"

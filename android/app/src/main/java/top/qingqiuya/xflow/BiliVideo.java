@@ -49,8 +49,10 @@ public class BiliVideo {
 
     public static boolean isBiliUrl(String s) {
         if (s == null) return false;
-        String low = s.toLowerCase();
-        return low.contains("bilibili.com/video/") || low.contains("b23.tv/");
+        String low = s.trim().toLowerCase();
+        if (low.contains("bilibili.com/video/") || low.contains("b23.tv/")) return true;
+        // 直接贴 BV 号也认（BV1GJ411x7h7 / bv1gj411x7h7 都行）
+        return low.matches("bv[0-9a-z]{10}");
     }
 
     public static void run(Context ctx, String url, File dir, Cb cb) {
