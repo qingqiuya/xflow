@@ -161,7 +161,10 @@ public class ApiServer {
                     || path.equals("/api/download") || path.equals("/api/share")
                     || path.equals("/api/files") || path.equals("/api/clipboard")
                     || path.equals("/api/send") || path.equals("/api/incoming");
-            if (!token.isEmpty() && !sharePath) {
+            // 只有「同一局域网（私有地址）」来的互传请求才免令牌。
+            // 公网来的（比如以后开了端口映射/DDNS）一律要令牌 —— 清秋 2026-11-16 定。
+            boolean lanPeer = isPrivateAddr(sock.getInetAddress());
+            if (!token.isEmpty() && !(sharePath && lanPeer)) {
                 String got = headers.getOrDefault("x-api-token", "");
                 if (got.isEmpty()) got = q.getOrDefault("token", "");
                 if (!token.equals(got)) {
@@ -488,6 +491,19 @@ public class ApiServer {
     }
 
     // ------------------------------------------------------------ 小工具
+
+    /** 私有局域网地址（10/8、172.16/12、192.168/16）+ 回环 + Tailscale 的 100.64/10。 */
+    private static boolean isPrivateAddr(java.net.InetAddress a) {
+        if (a == null) return false;
+        if (a.isLoopbackAddress() || a.isSiteLocalAddress()) return true;
+        byte[] b = a.getAddress();
+        if (b.length == 4) {
+            int f = b[0] & 0xFF;
+            int s = b[1] & 0xFF;
+            if (f == 100 && s >= 64 && s <= 127) return true; // CGNAT / Tailscale
+        }
+        return false;
+    }
 
     private static String dec(String s) {
         try {
