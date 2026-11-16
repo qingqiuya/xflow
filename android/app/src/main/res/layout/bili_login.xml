@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- B 站登录：统一深色卡片，扫码 / 网页两个 tab 在同一个壳里切 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/card_bg"
+    android:padding="18dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="登录 B 站"
+            android:textColor="#e8ebf2"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/biliLogout"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="退出"
+            android:textColor="#8b93a7"
+            android:textSize="12sp"
+            android:visibility="gone" />
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="登录后下载请求会带上 Cookie，480P 提到 720P / 1080P"
+        android:textColor="#8b93a7"
+        android:textSize="11.5sp" />
+
+    <!-- tab -->
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/tabQr"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/chip_bg"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="5dp"
+            android:text="扫码"
+            android:textColor="#4CC2FF"
+            android:textSize="12sp"
+            android:layout_marginEnd="8dp" />
+
+        <TextView
+            android:id="@+id/tabWeb"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/chip_bg"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="5dp"
+            android:text="网页"
+            android:textColor="#6b7488"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <!-- 扫码页 -->
+    <LinearLayout
+        android:id="@+id/pageQr"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:gravity="center_horizontal"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/qrTip"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="正在生成二维码…"
+            android:textColor="#8b93a7"
+            android:textSize="12sp" />
+
+        <ImageView
+            android:id="@+id/qrImage"
+            android:layout_width="216dp"
+            android:layout_height="216dp"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/qr_box_bg"
+            android:padding="8dp"
+            android:scaleType="fitCenter" />
+
+        <TextView
+            android:id="@+id/qrSave"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/btn_small_bg"
+            android:enabled="false"
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="8dp"
+            android:text="存到相册，用 B 站 App 选图扫"
+            android:textColor="#cfd6e4"
+            android:textSize="12sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:gravity="center"
+            android:text="同一部手机扫不了自己屏幕——\n存相册后：B 站 → 扫一扫 → 右上角相册"
+            android:textColor="#5b6478"
+            android:textSize="10.5sp" />
+    </LinearLayout>
+
+    <!-- 网页页 -->
+    <LinearLayout
+        android:id="@+id/pageWeb"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <FrameLayout
+            android:id="@+id/webBox"
+            android:layout_width="match_parent"
+            android:layout_height="440dp"
+            android:background="@drawable/web_box_bg"
+            android:clipToOutline="true">
+
+            <WebView
+                android:id="@+id/loginWeb"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+        </FrameLayout>
+
+        <TextView
+            android:id="@+id/webTip"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="登录成功后会自动关闭并保存 Cookie"
+            android:textColor="#5b6478"
+            android:textSize="10.5sp" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/biliRowClose"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:gravity="end"
+        android:paddingVertical="6dp"
+        android:text="关闭"
+        android:textColor="#4CC2FF"
+        android:textSize="13sp" />
+</LinearLayout>

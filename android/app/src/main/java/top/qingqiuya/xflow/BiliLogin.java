@@ -1,7 +1,6 @@
 package top.qingqiuya.xflow;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -93,199 +92,155 @@ public class BiliLogin {
 
     // ------------------------------------------------------------ 入口
 
-    /** 弹一个「怎么登录」的选择框。 */
+    /** 统一深色壳：扫码 / 网页 两个 tab 在一个对话框里切。 */
     public static void showLogin(final Activity a, final Runnable onSuccess) {
-        String[] items = {
-                "网页登录（推荐，短信验证码）",
-                "二维码（存相册后用 B 站 App 扫）",
-                loggedIn(a) ? "退出登录" : null
-        };
-        final String[] finalItems = java.util.Arrays.stream(items)
-                .filter(x -> x != null).toArray(String[]::new);
-        new AlertDialog.Builder(a, R.style.DarkDialog)
-                .setTitle(loggedIn(a) ? "B 站帐号（已登录）" : "登录 B 站")
-                .setItems(finalItems, (d, which) -> {
-                    String pick = finalItems[which];
-                    if (pick.startsWith("网页登录")) webLogin(a, onSuccess);
-                    else if (pick.startsWith("二维码")) qrLogin(a, onSuccess);
-                    else {
-                        logout(a);
-                        Toast.makeText(a, "已退出", Toast.LENGTH_SHORT).show();
-                        onSuccess.run();
-                    }
-                })
-                .setNegativeButton("取消", null)
-                .show();
-    }
+        final android.app.Dialog dlg = new android.app.Dialog(a, R.style.DarkDialog);
+        android.view.View root = android.view.LayoutInflater.from(a)
+                .inflate(R.layout.bili_login, null);
+        dlg.setContentView(root);
 
-    // ------------------------------------------------------------ 网页登录
+        android.view.Window w = dlg.getWindow();
+        if (w != null) {
+            w.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(0));
+            int wid = (int) (a.getResources().getDisplayMetrics().widthPixels * 0.92);
+            w.setLayout(wid, ViewGroup.LayoutParams.WRAP_CONTENT);
+        }
 
-    private static void webLogin(final Activity a, final Runnable onSuccess) {
-        final WebView wv = new WebView(a);
-        WebSettings st = wv.getSettings();
-        st.setJavaScriptEnabled(true);
-        st.setDomStorageEnabled(true);
-        st.setUserAgentString(UA);   // 用桌面 UA，移动版登录页滑块更勤
-        CookieManager.getInstance().setAcceptCookie(true);
-        CookieManager.getInstance().setAcceptThirdPartyCookies(wv, true);
+        final TextView tabQr = root.findViewById(R.id.tabQr);
+        final TextView tabWeb = root.findViewById(R.id.tabWeb);
+        final LinearLayout pageQr = root.findViewById(R.id.pageQr);
+        final LinearLayout pageWeb = root.findViewById(R.id.pageWeb);
+        final TextView qrTip = root.findViewById(R.id.qrTip);
+        final ImageView qrImage = root.findViewById(R.id.qrImage);
+        final TextView qrSave = root.findViewById(R.id.qrSave);
+        final TextView webTip = root.findViewById(R.id.webTip);
+        final TextView close = root.findViewById(R.id.biliRowClose);
+        final TextView logout = root.findViewById(R.id.biliLogout);
+        final WebView web = root.findViewById(R.id.loginWeb);
 
-        LinearLayout box = new LinearLayout(a);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.addView(wv, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(a, 520)));
-
-        final AlertDialog dlg = new AlertDialog.Builder(a, R.style.DarkDialog)
-                .setTitle("登录 B 站")
-                .setView(box)
-                .setNegativeButton("关闭", null)
-                .create();
-        dlg.show();
-        wv.loadUrl("https://passport.bilibili.com/login");
-
-        final Handler h = new Handler(Looper.getMainLooper());
-        final boolean[] done = {false};
-        final Runnable check = new Runnable() {
-            @Override
-            public void run() {
-                if (done[0]) return;
-                String ck = null;
-                try {
-                    ck = CookieManager.getInstance().getCookie("https://www.bilibili.com");
-                    if (ck == null || !ck.contains("SESSDATA=")) {
-                        String ck2 = CookieManager.getInstance().getCookie("https://passport.bilibili.com");
-                        if (ck2 != null && ck2.contains("SESSDATA=")) ck = ck2;
-                    }
-                } catch (Throwable ignored) {
-                }
-                if (ck != null && ck.contains("SESSDATA=")) {
-                    done[0] = true;
-                    String sess = pick(ck, "SESSDATA");
-                    String jct = pick(ck, "bili_jct");
-                    String uid = pick(ck, "DedeUserID");
-                    save(a, sess, jct, uid);
-                    try {
-                        dlg.dismiss();
-                    } catch (Throwable ignored) {
-                    }
-                    Toast.makeText(a, "登录成功", Toast.LENGTH_SHORT).show();
-                    if (onSuccess != null) onSuccess.run();
-                    return;
-                }
-                h.postDelayed(this, 1200);
-            }
-        };
-        h.postDelayed(check, 1500);
-        dlg.setOnDismissListener(d -> {
-            done[0] = true;
-            h.removeCallbacksAndMessages(null);
-            wv.destroy();
+        if (loggedIn(a)) logout.setVisibility(android.view.View.VISIBLE);
+        close.setOnClickListener(v -> dlg.dismiss());
+        logout.setOnClickListener(v -> {
+            logout(a);
+            Toast.makeText(a, "已退出 B 站登录", Toast.LENGTH_SHORT).show();
+            dlg.dismiss();
+            if (onSuccess != null) onSuccess.run();
         });
-    }
 
-    // ------------------------------------------------------------ 二维码登录
+        // ---- 网页 tab
+        final boolean[] webReady = {false};
+        final Runnable loadWeb = () -> {
+            if (webReady[0]) return;
+            webReady[0] = true;
+            WebSettings st = web.getSettings();
+            st.setJavaScriptEnabled(true);
+            st.setDomStorageEnabled(true);
+            st.setUserAgentString(UA);
+            CookieManager.getInstance().setAcceptCookie(true);
+            CookieManager.getInstance().setAcceptThirdPartyCookies(web, true);
+            web.loadUrl("https://passport.bilibili.com/login");
+        };
 
-    private static void qrLogin(final Activity a, final Runnable onSuccess) {
-        final LinearLayout box = new LinearLayout(a);
-        box.setOrientation(LinearLayout.VERTICAL);
-        int pad = dp(a, 16);
-        box.setPadding(pad, pad, pad, pad);
-
-        final TextView tip = new TextView(a);
-        tip.setText("正在生成二维码…");
-        tip.setTextColor(0xFFDDE3F0);
-        box.addView(tip);
-
-        final ImageView iv = new ImageView(a);
-        LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(dp(a, 260), dp(a, 260));
-        ip.topMargin = dp(a, 12);
-        box.addView(iv, ip);
-
-        final Button save = new Button(a);
-        save.setText("存到相册（用 B 站 App 扫相册）");
-        save.setEnabled(false);
-        LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        bp.topMargin = dp(a, 12);
-        box.addView(save, bp);
-
-        final AlertDialog dlg = new AlertDialog.Builder(a, R.style.DarkDialog)
-                .setTitle("扫码/相册码登录")
-                .setView(box)
-                .setNegativeButton("关闭", null)
-                .create();
-        dlg.show();
-
-        final Handler h = new Handler(Looper.getMainLooper());
+        // ---- 扫码 tab
         final boolean[] stop = {false};
-        final Bitmap[] bmp = new Bitmap[]{null};
         final String[] key = new String[]{null};
+        final Bitmap[] bmp = new Bitmap[]{null};
+        final Runnable loadQr = () -> {
+            if (key[0] != null) return;
+            new Thread(() -> {
+                try {
+                    String gen = BiliVideo.httpGet(
+                            "https://passport.bilibili.com/x/passport-login/web/qrcode/generate", null);
+                    org.json.JSONObject o = new org.json.JSONObject(gen);
+                    org.json.JSONObject data = o.optJSONObject("data");
+                    final String url = data == null ? "" : data.optString("url", "");
+                    key[0] = data == null ? "" : data.optString("qrcode_key", "");
+                    if (url.isEmpty() || key[0].isEmpty()) {
+                        a.runOnUiThread(() -> qrTip.setText("生成二维码失败，换个网络再试"));
+                        return;
+                    }
+                    final Bitmap b = qrBitmap(url, 640);
+                    bmp[0] = b;
+                    a.runOnUiThread(() -> {
+                        qrImage.setImageBitmap(b);
+                        qrTip.setText("等待扫码…");
+                        qrSave.setEnabled(true);
+                        qrSave.setAlpha(1f);
+                    });
+                    while (!stop[0]) {
+                        Thread.sleep(2500);
+                        String pollUrl = "https://passport.bilibili.com/x/passport-login/web/qrcode/poll?qrcode_key=" + key[0];
+                        String r = BiliVideo.httpGet(pollUrl, null);
+                        org.json.JSONObject po = new org.json.JSONObject(r);
+                        org.json.JSONObject pd = po.optJSONObject("data");
+                        int st = pd == null ? -1 : pd.optInt("code", -1);
+                        if (st == 86101) {
+                            a.runOnUiThread(() -> qrTip.setText("等待扫码…"));
+                        } else if (st == 86090) {
+                            a.runOnUiThread(() -> qrTip.setText("已扫码，请在手机上确认"));
+                        } else if (st == 0) {
+                            stop[0] = true;
+                            String back = pd.optString("url", "");
+                            save(a, qs(back, "SESSDATA"), qs(back, "bili_jct"),
+                                    qs(back, "DedeUserID"));
+                            a.runOnUiThread(() -> {
+                                Toast.makeText(a, "登录成功", Toast.LENGTH_SHORT).show();
+                                dlg.dismiss();
+                                if (onSuccess != null) onSuccess.run();
+                            });
+                            return;
+                        } else if (st == 86038) {
+                            stop[0] = true;
+                            a.runOnUiThread(() -> qrTip.setText("二维码过期，重开一次"));
+                            return;
+                        }
+                    }
+                } catch (Exception e) {
+                    Log.w(TAG, "二维码登录失败", e);
+                    a.runOnUiThread(() -> qrTip.setText("出错：" + e.getMessage()));
+                }
+            }).start();
+        };
 
-        save.setOnClickListener(v -> {
+        qrSave.setOnClickListener(v -> {
             if (bmp[0] == null) return;
             String p = saveToGallery(a, bmp[0]);
             Toast.makeText(a, p != null ? "已存到相册：" + p : "存相册失败",
                     Toast.LENGTH_SHORT).show();
         });
 
-        new Thread(() -> {
-            try {
-                String gen = BiliVideo.httpGet(
-                        "https://passport.bilibili.com/x/passport-login/web/qrcode/generate", null);
-                org.json.JSONObject o = new org.json.JSONObject(gen);
-                final String url = o.optJSONObject("data").optString("url", "");
-                key[0] = o.optJSONObject("data").optString("qrcode_key", "");
-                if (url.isEmpty() || key[0].isEmpty()) {
-                    h.post(() -> tip.setText("生成二维码失败"));
-                    return;
-                }
-                final Bitmap b = qrBitmap(url, 640);
-                bmp[0] = b;
-                h.post(() -> {
-                    iv.setImageBitmap(b);
-                    tip.setText("用 B 站 App 扫这张码；同机扫不了就点下面存相册");
-                    save.setEnabled(true);
-                });
-                // 轮询
-                while (!stop[0]) {
-                    Thread.sleep(2500);
-                    String pollUrl = "https://passport.bilibili.com/x/passport-login/web/qrcode/poll?qrcode_key=" + key[0];
-                    String r = BiliVideo.httpGet(pollUrl, null);
-                    org.json.JSONObject po = new org.json.JSONObject(r);
-                    org.json.JSONObject pd = po.optJSONObject("data");
-                    int st = pd == null ? -1 : pd.optInt("code", -1);
-                    if (st == 86101) {
-                        h.post(() -> tip.setText("等待扫码…"));
-                    } else if (st == 86090) {
-                        h.post(() -> tip.setText("已扫码，请在手机上确认"));
-                    } else if (st == 0) {
-                        stop[0] = true;
-                        String back = pd.optString("url", "");
-                        String sess = qs(back, "SESSDATA");
-                        String jct = qs(back, "bili_jct");
-                        String uid = qs(back, "DedeUserID");
-                        save(a, sess, jct, uid);
-                        h.post(() -> {
-                            try {
-                                dlg.dismiss();
-                            } catch (Throwable ignored) {
-                            }
-                            Toast.makeText(a, "登录成功", Toast.LENGTH_SHORT).show();
-                            if (onSuccess != null) onSuccess.run();
-                        });
-                        return;
-                    } else if (st == 86038) {
-                        stop[0] = true;
-                        h.post(() -> tip.setText("二维码已过期，关掉重开"));
-                        return;
-                    }
-                }
-            } catch (Exception e) {
-                Log.w(TAG, "二维码登录失败", e);
-                h.post(() -> tip.setText("出错：" + e.getMessage()));
-            }
-        }).start();
+        // tab 切换
+        final Runnable[] showQr = new Runnable[1];
+        final Runnable[] showWeb = new Runnable[1];
+        showQr[0] = () -> {
+            pageQr.setVisibility(android.view.View.VISIBLE);
+            pageWeb.setVisibility(android.view.View.GONE);
+            tabQr.setTextColor(0xFF4CC2FF);
+            tabWeb.setTextColor(0xFF6b7488);
+            loadQr.run();
+        };
+        showWeb[0] = () -> {
+            pageQr.setVisibility(android.view.View.GONE);
+            pageWeb.setVisibility(android.view.View.VISIBLE);
+            tabWeb.setTextColor(0xFF4CC2FF);
+            tabQr.setTextColor(0xFF6b7488);
+            loadWeb.run();
+        };
+        tabQr.setOnClickListener(v -> showQr[0].run());
+        tabWeb.setOnClickListener(v -> showWeb[0].run());
 
-        dlg.setOnDismissListener(d -> stop[0] = true);
+        // 默认开扫码（成功率高、不用输密码）
+        showQr[0].run();
+
+        dlg.setOnDismissListener(x -> {
+            stop[0] = true;
+            try {
+                web.stopLoading();
+                web.destroy();
+            } catch (Throwable ignored) {
+            }
+        });
+        dlg.show();
     }
 
     private static Bitmap qrBitmap(String text, int size) {
