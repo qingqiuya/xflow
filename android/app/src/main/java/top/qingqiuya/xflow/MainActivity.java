@@ -468,6 +468,12 @@ public class MainActivity extends Activity {
     // 查 GitHub 的 latest release，比较 tag 和本地 versionName。
     // 国内网络可能连不上，失败就静默（点一下没反应比弹错误好）。
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        refreshBiliChip(findViewById(R.id.biliChip));
+    }
+
     private void refreshBiliChip(TextView chip) {
         if (chip == null) return;
         if (BiliLogin.loggedIn(this)) {

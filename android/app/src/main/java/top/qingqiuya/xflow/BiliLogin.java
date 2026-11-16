@@ -164,7 +164,9 @@ public class BiliLogin {
                     while (!stop[0]) {
                         Thread.sleep(2500);
                         String pollUrl = "https://passport.bilibili.com/x/passport-login/web/qrcode/poll?qrcode_key=" + key[0];
-                        String r = BiliVideo.httpGet(pollUrl, null);
+                        String[] rr = BiliVideo.httpGetWithCookie(pollUrl);
+                        String r = rr[0];
+                        final String setCookie = rr[1];
                         org.json.JSONObject po = new org.json.JSONObject(r);
                         org.json.JSONObject pd = po.optJSONObject("data");
                         int st = pd == null ? -1 : pd.optInt("code", -1);
@@ -175,8 +177,23 @@ public class BiliLogin {
                         } else if (st == 0) {
                             stop[0] = true;
                             String back = pd.optString("url", "");
-                            save(a, qs(back, "SESSDATA"), qs(back, "bili_jct"),
-                                    qs(back, "DedeUserID"));
+                            // 新版 B 站可能不给 data.url 了，Cookie 直接在 Set-Cookie 里，
+                            // 两路都试，别漏
+                            String sess = qs(back, "SESSDATA");
+                            String jct = qs(back, "bili_jct");
+                            String uid = qs(back, "DedeUserID");
+                            if (sess == null || sess.isEmpty()) sess = pick(setCookie, "SESSDATA");
+                            if (jct == null || jct.isEmpty()) jct = pick(setCookie, "bili_jct");
+                            if (uid == null || uid.isEmpty()) uid = pick(setCookie, "DedeUserID");
+                            Log.i(TAG, "扫码成功 sessdata_len=" + (sess == null ? 0 : sess.length())
+                                    + " url_len=" + back.length() + " cookie_len=" + setCookie.length());
+                            final String fs = sess, fj = jct, fu = uid;
+                            if (fs == null || fs.isEmpty()) {
+                                a.runOnUiThread(() -> qrTip.setText(
+                                        "扫码成功但没拿到 SESSDATA，先试试账号登录"));
+                                return;
+                            }
+                            save(a, fs, fj, fu);
                             a.runOnUiThread(() -> {
                                 Toast.makeText(a, "登录成功", Toast.LENGTH_SHORT).show();
                                 dlg.dismiss();

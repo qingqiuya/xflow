@@ -197,6 +197,37 @@ public class BiliVideo {
         if (ck != null && !ck.isEmpty()) c.setRequestProperty("Cookie", ck);
     }
 
+    /** 给 BiliLogin 扫码用：返回 body，同时把 Set-Cookie 头也带出来。 */
+    static String[] httpGetWithCookie(String url) throws Exception {
+        HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+        setHeaders(c);
+        c.setConnectTimeout(12000);
+        c.setReadTimeout(15000);
+        if (c.getResponseCode() != 200) {
+            int code = c.getResponseCode();
+            c.disconnect();
+            throw new Exception("HTTP " + code);
+        }
+        StringBuilder sb = new StringBuilder();
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(c.getInputStream(), "UTF-8"))) {
+            String line;
+            while ((line = br.readLine()) != null) sb.append(line);
+        }
+        StringBuilder ck = new StringBuilder();
+        java.util.Map<String, java.util.List<String>> hs = c.getHeaderFields();
+        for (java.util.Map.Entry<String, java.util.List<String>> e : hs.entrySet()) {
+            if (e.getKey() != null && e.getKey().equalsIgnoreCase("Set-Cookie")) {
+                for (String v : e.getValue()) {
+                    if (v == null) continue;
+                    if (ck.length() > 0) ck.append("; ");
+                    ck.append(v.split(";")[0]);
+                }
+            }
+        }
+        c.disconnect();
+        return new String[]{sb.toString(), ck.toString()};
+    }
+
     /** 给 BiliLogin 用的 GET（返回 body 文本）。 */
     static String httpGet(String url, String cookie) throws Exception {
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
