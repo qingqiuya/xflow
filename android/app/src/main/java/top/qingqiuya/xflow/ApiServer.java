@@ -1,5 +1,7 @@
 package top.qingqiuya.xflow;
 
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.util.Log;
@@ -243,6 +245,28 @@ public class ApiServer {
     }
 
     private String route(String method, String path, Map<String, String> q) {
+        if (path.equals("/api/clipboard")) {
+            ClipboardManager cm = (ClipboardManager) ctx.getSystemService(Context.CLIPBOARD_SERVICE);
+            if ("GET".equals(method)) {
+                // Android 10+ 后台读剪贴板会被拦住，读不到就返回空串，不报错
+                String t = "";
+                try {
+                    ClipData cp = cm.getPrimaryClip();
+                    if (cp != null && cp.getItemCount() > 0) {
+                        t = String.valueOf(cp.getItemAt(0).coerceToText(ctx));
+                    }
+                } catch (Exception ignored) {
+                }
+                return "{\"ok\":true,\"text\":\"" + esc(t) + "\",\"note\":\"后台读取可能被系统限制\"}";
+            }
+            String text = q.getOrDefault("text", "");
+            try {
+                cm.setPrimaryClip(ClipData.newPlainText("XFlow", text));
+                return "{\"ok\":true,\"len\":" + text.length() + "}";
+            } catch (Exception e) {
+                return "{\"ok\":false,\"err\":\"" + esc(String.valueOf(e.getMessage())) + "\"}";
+            }
+        }
         if (path.equals("/api/share")) {
             // 互传：告诉对方收到的文件放哪、我这边的收件目录叫啥
             return "{\"ok\":true,\"platform\":\"android\",\"dir\":\"Download/" + Transfer.SUBDIR

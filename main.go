@@ -533,6 +533,7 @@ func main() {
 	setAPIListener(ln, mux)
 	// 互传（汐港搬过来的）：/api/fs /api/download /api/upload /api/send /api/incoming /api/share
 	registerShare(mux)
+	registerClipboard(mux)
 	go http.Serve(ln, withCORS(guardMux(mux, needTok)))
 	startDiscovery(port, needTok)
 	defer stopDiscovery()
