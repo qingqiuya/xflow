@@ -1074,7 +1074,7 @@ public class MainActivity extends Activity {
                 if (pagerW == 0) break;
                 float p = startProgress - dx / (float) pagerW;
                 p = Math.max(0f, Math.min(1f, p));
-                if (!shareTabOn && p > 0f) p = p * 0.12f;  // 互传关了：滑不动，只给一点回弹
+                if (!shareTabOn) p = 0f;  // 互传关了：纹丝不动，一点都别露出来
                 pageProgress = p;
                 applyProgress(pageProgress);
                 return true; // 跟手阶段把事件吃掉
