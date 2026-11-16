@@ -70,7 +70,7 @@ public class Transfer {
             OutputStream os = res(ctx).openOutputStream(uri);
             if (os == null) throw new Exception("打不开输出流");
             try {
-                copy(in, os);
+                copyLimit(in, os, len);
             } finally {
                 os.close();
             }
@@ -82,7 +82,7 @@ public class Transfer {
         File f = new File(dir, name);
         FileOutputStream os = new FileOutputStream(f);
         try {
-            copy(in, os);
+            copyLimit(in, os, len);
         } finally {
             os.close();
         }
@@ -142,6 +142,23 @@ public class Transfer {
             return new FileInputStream(new File(Uri.parse(uri).getPath()));
         }
         throw new Exception("不认这个 uri：" + uri);
+    }
+
+    /**
+     * 只读 limit 个字节 —— socket 上读完 body 不会收到 EOF（HTTP keep-alive），
+     * 用无上限的 copy 会一直等下去，客户端超时断开才结束（结果就是文件 0 字节 + 没响应）。
+     */
+    private static void copyLimit(InputStream in, OutputStream out, long limit) throws Exception {
+        byte[] buf = new byte[64 * 1024];
+        long remain = limit;
+        while (remain > 0) {
+            int want = (int) Math.min(buf.length, remain);
+            int n = in.read(buf, 0, want);
+            if (n <= 0) break;
+            out.write(buf, 0, n);
+            remain -= n;
+        }
+        out.flush();
     }
 
     private static void copy(InputStream in, OutputStream out) throws Exception {
