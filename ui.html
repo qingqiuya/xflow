@@ -227,11 +227,11 @@ button:active{transform:scale(.97)}
   </div>
 
   <!-- 发送 -->
-  <div class="drop" id="dropZone">
+  <label class="drop" id="dropZone" for="shFile">
     <div class="drop-ico">↑</div>
     <div class="drop-t">点这里选文件，或拖进来</div>
     <div class="drop-s" id="dropTo">先选上面一台设备</div>
-  </div>
+  </label>
 
   <!-- 收件箱 -->
   <div class="sec">
@@ -250,7 +250,7 @@ button:active{transform:scale(.97)}
     <button class="tiny" id="shTextSend">发送</button>
   </div>
   <div class="msgline" id="shMsg"></div>
-  <input type="file" id="shFile" multiple hidden>
+  <input type="file" id="shFile" multiple style="position:fixed;left:-3000px;width:1px;height:1px;opacity:0">
   <div style="display:none">
     <span id="shWhere"></span><div id="shList"></div>
     <button id="shPick"></button><button id="shClose"></button>
@@ -419,7 +419,7 @@ async function shBrowse(path){
   _l2.querySelectorAll('[data-dir]').forEach(el=>{
     el.onclick=()=>shBrowse(el.dataset.dir);
   });
-  document.getElementById('shUp').disabled=!d.parent;
+  const _up=document.getElementById('shUp'); if(_up) _up.disabled=!d.parent;
 }
 // 互传总开关
 let shOn = true;
@@ -447,10 +447,7 @@ shPaintChip();
 document.getElementById('shClose').onclick=()=>showPage('dl');
 document.getElementById('tabDl').onclick=()=>showPage('dl');
 document.getElementById('tabSh').onclick=()=>shOpen();
-document.getElementById('shUp').onclick=async()=>{
-  const d=await shJ(shBase()+'/api/fs?path='+encodeURIComponent(shPath));
-  if(d.parent) shBrowse(d.parent);
-};
+
 document.getElementById('shTokSave').onclick=()=>{
   shSaveTok(shPeer.ip,document.getElementById('shTok').value.trim());
   document.getElementById('shTokWrap').style.display='none';
@@ -460,7 +457,13 @@ document.getElementById('shPick').onclick=()=>document.getElementById('shFile').
 (function(){
   const dz=document.getElementById('dropZone'), fi=document.getElementById('shFile');
   if(!dz||!fi) return;
-  dz.onclick=()=>{ if(!shPeer){ alert('先选一台设备'); return } fi.click() };
+  dz.addEventListener('click',e=>{
+    if(!shPeer){ e.preventDefault(); e.stopPropagation(); alert('先选一台设备'); return }
+  });
+  // 没有 label for 的兜底（老版本 WebView2）
+  dz.addEventListener('click',e=>{
+    if(shPeer && !e.target.closest('input')) { /* label for 已处理 */ }
+  });
   ['dragenter','dragover'].forEach(t=>dz.addEventListener(t,e=>{e.preventDefault();dz.classList.add('hot')}));
   ['dragleave','drop'].forEach(t=>dz.addEventListener(t,e=>{e.preventDefault();dz.classList.remove('hot')}));
   dz.addEventListener('drop',e=>{
@@ -545,6 +548,7 @@ async function shPollPending(){
     const d=await (await fetch('/api/incoming')).json();
     const fs=d.files||[];
     const el=document.getElementById('shPend');
+    if(!el) return;   // 新版收件箱是列表，没有待确认条
     if(!fs.length){ el.textContent=''; return }
     const f=fs[0];
     el.innerHTML='待接收：'+esc(f.name)+'（'+fs(f.size)+'，来自 '+esc(f.from)+'） '+
