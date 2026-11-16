@@ -662,29 +662,93 @@ public class SharePanel {
         }, 320);
     }
 
-    /** 输入文字用独立对话框：键盘弹起时对话框整个被顶上去，不依赖页面滚动。 */
+    /** 输入文字：自绘深色卡片对话框（跟 App 一个色系），键盘弹起时整个被顶上去。 */
     private void showTextDialog() {
+        int pad = dp(20);
+        android.widget.LinearLayout box = new android.widget.LinearLayout(act);
+        box.setOrientation(android.widget.LinearLayout.VERTICAL);
+        box.setPadding(pad, dp(18), pad, dp(16));
+        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+        bg.setColor(0xFF141b26);
+        bg.setCornerRadius(dp(16));
+        bg.setStroke(dp(1), 0xFF232936);
+        box.setBackground(bg);
+
+        android.widget.TextView title = new android.widget.TextView(act);
+        title.setText("发送文字");
+        title.setTextColor(0xFFe8ebf2);
+        title.setTextSize(16f);
+        title.setTypeface(null, android.graphics.Typeface.BOLD);
+        box.addView(title);
+
         final android.widget.EditText e = new android.widget.EditText(act);
         e.setHint("打一段字发过去");
         e.setTextSize(14f);
-        e.setMinLines(2);
+        e.setMinLines(3);
         e.setMaxLines(6);
+        e.setGravity(android.view.Gravity.TOP | android.view.Gravity.START);
         e.setInputType(android.text.InputType.TYPE_CLASS_TEXT
                 | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE);
-        int pad = dp(18);
-        android.widget.LinearLayout box = new android.widget.LinearLayout(act);
-        box.setOrientation(android.widget.LinearLayout.VERTICAL);
-        box.setPadding(pad, dp(6), pad, 0);
+        e.setTextColor(0xFFe8ebf2);
+        e.setHintTextColor(0xFF6b7385);
+        e.setBackgroundResource(R.drawable.field);
+        e.setPadding(dp(12), dp(10), dp(12), dp(10));
+        android.widget.LinearLayout.LayoutParams elp = new android.widget.LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT);
+        elp.topMargin = dp(12);
+        e.setLayoutParams(elp);
         box.addView(e);
-        new android.app.AlertDialog.Builder(act, R.style.DarkDialog)
-                .setTitle("发送文字")
-                .setView(box)
-                .setPositiveButton("发送", (d, w) -> {
-                    String t = e.getText().toString().trim();
-                    if (!t.isEmpty()) postClipboard(t, false);
-                })
-                .setNegativeButton("取消", null)
-                .show();
+
+        android.widget.LinearLayout row = new android.widget.LinearLayout(act);
+        row.setGravity(android.view.Gravity.END);
+        row.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        android.widget.LinearLayout.LayoutParams rlp = new android.widget.LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT);
+        rlp.topMargin = dp(14);
+        row.setLayoutParams(rlp);
+
+        final android.app.Dialog d = new android.app.Dialog(act, R.style.DarkDialog);
+
+        android.widget.TextView cancel = new android.widget.TextView(act);
+        cancel.setText("取消");
+        cancel.setTextColor(0xFFe8ebf2);
+        cancel.setTextSize(13.5f);
+        cancel.setPadding(dp(18), dp(10), dp(18), dp(10));
+        cancel.setBackgroundResource(R.drawable.chip);
+        cancel.setOnClickListener(v -> d.dismiss());
+
+        android.widget.TextView ok = new android.widget.TextView(act);
+        ok.setText("发送");
+        ok.setTextColor(0xFF031018);
+        ok.setTextSize(13.5f);
+        ok.setTypeface(null, android.graphics.Typeface.BOLD);
+        ok.setPadding(dp(22), dp(10), dp(22), dp(10));
+        ok.setBackgroundResource(R.drawable.primary);
+        ok.setOnClickListener(v -> {
+            String t = e.getText().toString().trim();
+            d.dismiss();
+            if (!t.isEmpty()) postClipboard(t, false);
+        });
+
+        android.widget.LinearLayout.LayoutParams mlp = new android.widget.LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT);
+        mlp.leftMargin = dp(10);
+        row.addView(cancel);
+        row.addView(ok, mlp);
+        box.addView(row);
+
+        d.setContentView(box);
+        d.setCanceledOnTouchOutside(true);
+        d.show();
+        if (d.getWindow() != null) {
+            d.getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(0x00000000));
+            d.getWindow().setLayout((int) (act.getResources().getDisplayMetrics().widthPixels * 0.90f),
+                    android.view.ViewGroup.LayoutParams.WRAP_CONTENT);
+        }
+        e.requestFocus();
     }
 
     private int dp(int v) {
