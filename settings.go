@@ -165,8 +165,35 @@ func authOK(r *http.Request, needToken bool) bool {
 // 之前只校验「写」接口，读接口（/api/jobs）局域网内谁都能拉，等于把
 // 下载任务列表暴露给同一 WiFi 的所有人 —— 跟手机端 X-API-Token 全校验
 // 的行为也对不上，现在统一。
+// isSharePath 互传/剪贴板那几个接口：同一个局域网里自己设备之间用，
+// 不该为了传个文件先让人手抄 32 位令牌。下载控制接口（加任务/删任务/看列表）
+// 仍然全校验。
+func isSharePath(p string) bool {
+	switch p {
+	case "/api/fs", "/api/upload", "/api/download", "/api/send",
+		"/api/incoming", "/api/share", "/api/clipboard", "/api/files":
+		return true
+	}
+	return false
+}
+
+// isPrivatePeer 来源是不是局域网私有地址（10/8、172.16/12、192.168/16）。
+func isPrivatePeer(r *http.Request) bool {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsPrivate()
+}
+
 func guardMux(mux *http.ServeMux, needToken bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// 局域网里自家设备互传：放行（接收侧还有「自动接收」开关把关）
+		if needToken && isSharePath(r.URL.Path) && isPrivatePeer(r) {
+			mux.ServeHTTP(w, r)
+			return
+		}
 		if needToken && !isLoopbackReq(r) && !authOK(r, true) {
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
 			w.WriteHeader(401)

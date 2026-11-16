@@ -139,7 +139,13 @@ public class ApiServer {
             }
 
             // 令牌校验：header 或 ?token= 都行（浏览器直接打开方便）
-            if (!token.isEmpty()) {
+            // 例外：互传/剪贴板这几个接口在同一局域网内自己设备之间用，不折腾人抄令牌
+            // （收文件那头有「自动接收」开关把关）
+            boolean sharePath = path.equals("/api/fs") || path.equals("/api/upload")
+                    || path.equals("/api/download") || path.equals("/api/share")
+                    || path.equals("/api/files") || path.equals("/api/clipboard")
+                    || path.equals("/api/send") || path.equals("/api/incoming");
+            if (!token.isEmpty() && !sharePath) {
                 String got = headers.getOrDefault("x-api-token", "");
                 if (got.isEmpty()) got = q.getOrDefault("token", "");
                 if (!token.equals(got)) {
