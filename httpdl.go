@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -110,12 +112,15 @@ func uniquePath(dir, name string) string {
 
 const (
 	// 同一段连续失败几次就放弃整个任务
-	maxRangeAttempts = 3
+	// 2026-11-19：3 → 8。慢速直链（buzzheavier / Cloudflare R2 这类）经常
+	// 几十秒不吐数据，3 次就判死太激进，任务动不动就报 error。
+	maxRangeAttempts = 8
 )
 
 // 一个连接多久没有任何新数据就认定它死了（read 本身可能永远不返回）。
 // 用变量而不是常量，方便测试里调小。
-var rangeStallTimeout = 30 * time.Second
+// 2026-11-19：30s → 90s，同上，给慢源留出喘气的时间。
+var rangeStallTimeout = 90 * time.Second
 
 // withStallWatch 给一次请求加看门狗：超过 timeout 没有任何进展就 cancel。
 // 返回的 *atomic.Int64 由调用方每次读到数据时 Store(now)。
@@ -276,11 +281,77 @@ func startHTTP(j *Job) {
 		startWorkers = maxWorkers
 	}
 
-	ch := make(chan [2]int64, (size/chunkSize)+2)
+	// 续传：读 .part.json 里已完成块的偏移，跳过它们（2026-11-19 补）。
+	// 以前只有 .part 没有块状态，resume 时等于从头重下。
+	statePath := part + ".json"
+	var stateMu sync.Mutex
+	doneSet := map[int64]int64{}
+	var doneBytes int64
+	finished := false
+	// 注意：多段下载时 .part 是渐进增长的，大小只在写到最后一块时才等于 size，
+	// 所以这里只要求文件存在且非空，真正的校验交给 json 里的 size 字段。
+	if st, serr := os.Stat(part); serr == nil && st.Size() > 0 {
+		if raw, rerr := os.ReadFile(statePath); rerr == nil {
+			var stt struct {
+				Size   int64   `json:"size"`
+				Chunks []int64 `json:"chunks"`
+			}
+			if json.Unmarshal(raw, &stt) == nil && stt.Size == size {
+				for _, off := range stt.Chunks {
+					if off < 0 || off >= size {
+						continue
+					}
+					l := chunkSize
+					if off+l > size {
+						l = size - off
+					}
+					doneSet[off] = l
+					doneBytes += l
+				}
+			}
+		}
+	}
+	saveState := func() {
+		stateMu.Lock()
+		offs := make([]int64, 0, len(doneSet))
+		for off := range doneSet {
+			offs = append(offs, off)
+		}
+		stateMu.Unlock()
+		sort.Slice(offs, func(a, b int) bool { return offs[a] < offs[b] })
+		raw, merr := json.Marshal(struct {
+			Size   int64   `json:"size"`
+			Chunks []int64 `json:"chunks"`
+		}{size, offs})
+		if merr != nil {
+			return
+		}
+		tmp := statePath + ".tmp"
+		if werr := os.WriteFile(tmp, raw, 0644); werr == nil {
+			_ = os.Rename(tmp, statePath)
+		}
+	}
+	markDone := func(off, length int64) {
+		stateMu.Lock()
+		if _, ok := doneSet[off]; !ok {
+			doneSet[off] = length
+		}
+		stateMu.Unlock()
+	}
+	defer func() {
+		if !finished {
+			saveState()
+		}
+	}()
+
+	ch := make(chan [2]int64, int(size/chunkSize)+2)
 	for from := int64(0); from < size; from += chunkSize {
 		to := from + chunkSize - 1
 		if to >= size {
 			to = size - 1
+		}
+		if _, ok := doneSet[from]; ok {
+			continue
 		}
 		ch <- [2]int64{from, to}
 	}
@@ -288,7 +359,7 @@ func startHTTP(j *Job) {
 
 	j.mu.Lock()
 	j.Total = size
-	j.Done = 0
+	j.Done = doneBytes
 	j.Segments = make([]Segment, maxWorkers)
 	j.mu.Unlock()
 
@@ -298,6 +369,22 @@ func startHTTP(j *Job) {
 		active int32
 		idSeq  int32
 	)
+
+	atomic.StoreInt64(&total, doneBytes)
+	// 每 5 秒把已完成块落盘，断流/断电都不至于白下
+	go func() {
+		t := time.NewTicker(5 * time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				saveState()
+				return
+			case <-t.C:
+				saveState()
+			}
+		}
+	}()
 
 	runWorker := func() {
 		defer wg.Done()
@@ -338,8 +425,14 @@ func startHTTP(j *Job) {
 					}
 					return
 				}
-				time.Sleep(time.Duration(attempt) * 700 * time.Millisecond)
+				// 指数退避（0.5s, 1s, 2s, 4s…，封顶 20s），别一失败就猛捶源站
+				backoff := time.Duration(1<<uint(attempt)) * 500 * time.Millisecond
+				if backoff > 20*time.Second {
+					backoff = 20 * time.Second
+				}
+				time.Sleep(backoff)
 			}
+			markDone(rng[0], rng[1]-rng[0]+1)
 		}
 	}
 
@@ -441,6 +534,9 @@ func startHTTP(j *Job) {
 		setState("error", "连接提前结束，可能被服务器限流")
 		return
 	}
+	finished = true
+	saveState()
+	_ = os.Remove(statePath)
 	finishJob(j, part, finalPath)
 }
 
