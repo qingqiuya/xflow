@@ -694,8 +694,8 @@ async function load(){
       ${(j.segments&&j.segments.length)?`<div class="segs ${j.state==='done'?'done':''}">${j.segments.map(s=>{const tot=s.to-s.from+1;const d=Math.min(100,s.done/tot*100);return `<span><b style="width:${d.toFixed(0)}%"></b></span>`}).join('')}</div>`:''}
       <div class="acts">
         ${j.state==='downloading'?`<button class="mini" data-id="${j.id}" data-act="pause">暂停</button>`:''}
-        ${(j.state==='paused'||j.state==='queued')?`<button class="mini" data-id="${j.id}" data-act="resume">继续</button>`:''}
-        ${(j.state==='done'||j.state==='error')?`<button class="mini" data-id="${j.id}" data-act="redownload">重新下载</button>`:''}
+        ${(j.state === 'paused' || j.state === 'queued' || j.state === 'error') ? `<button class="mini" data-id="${j.id}" data-act="resume">继续</button>` : ''}
+        ${(j.state === 'done' || j.state === 'error') ? `<button class="mini" data-id="${j.id}" data-act="redownload">从头下载</button>` : ''}
         <button class="mini" data-id="${j.id}" data-act="open">打开位置</button>
         <button class="danger" data-id="${j.id}" data-act="remove">删除</button>
       </div></div>`;
