@@ -597,7 +597,8 @@ document.getElementById('pickDir').onclick=e=>{
   });
 })();
 
-fi.onchange=e=>{
+const _sf=document.getElementById('shFile');
+if(_sf) _sf.onchange=e=>{
   const files=Array.from(e.target.files||[]);
   e.target.value='';
   if(files.length) shSendFiles(files, files.map(f=>f.name));
