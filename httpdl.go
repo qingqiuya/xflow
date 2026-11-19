@@ -32,6 +32,12 @@ var httpClient = &http.Client{
 }
 
 func fileNameFromURL(u string) string {
+	// S3 / Cloudflare R2 的预签名直链没有路径文件名，真名塞在 query 里：
+	//   ?response-content-disposition=attachment%3B%20filename%3D%22x.iso%22
+	// 2026-11-19：massgrave / buzzheavier 这类源全这样，以前不看一下就退回一串 id。
+	if n := fileNameFromQuery(u); n != "" {
+		return n
+	}
 	// 去 query
 	if i := strings.IndexAny(u, "?#"); i >= 0 {
 		u = u[:i]
@@ -42,6 +48,24 @@ func fileNameFromURL(u string) string {
 	}
 	base = regexp.MustCompile(`[\\/:*?"<>|]`).ReplaceAllString(base, "_")
 	return base
+}
+
+// fileNameFromQuery 从 URL 的 query 里挖文件名。
+// 只认标准的那几个键，免得把 ?name=xx 这类普通参数当真名。
+func fileNameFromQuery(raw string) string {
+	pu, err := url.Parse(raw)
+	if err != nil || pu.RawQuery == "" {
+		return ""
+	}
+	q := pu.Query()
+	for _, k := range []string{"response-content-disposition", "content-disposition"} {
+		if v := q.Get(k); v != "" {
+			if n := filenameFromDisposition(v); n != "" {
+				return n
+			}
+		}
+	}
+	return ""
 }
 
 // filenameFromDisposition 从 Content-Disposition 里取文件名。
@@ -273,9 +297,9 @@ func startHTTP(j *Job) {
 		return
 	}
 
-	// 文件名修正：URL 里只是 hash 时，用 Content-Disposition 给的真名。
-	// 只在还没开始下（没有 .part）时改名，避免丢掉已下的进度。
-	if looksLikeHashName(name) {
+	// 文件名修正：名字看不出类型时，用 Content-Disposition 给的真名。
+	// （以前只认 32 位 hex，buzzheavier 那种 11 位 base62（goby1okwv117）就漏了）
+	if filepath.Ext(name) == "" {
 		if realName := filenameFromDisposition(resp.Header.Get("Content-Disposition")); realName != "" && realName != name {
 			if _, serr := os.Stat(part); serr != nil {
 				finalPath = uniquePath(dir, realName)
@@ -683,7 +707,60 @@ func finishJob(j *Job, part, final string) {
 		j.State = "error"
 		j.Err = err.Error()
 		j.mu.Unlock()
+		return
 	}
+	// 名字里看不出类型（没扩展名）时，按文件头补一个 —— 不然下完是个没后缀的裸文件，
+	// Windows 双击不认识，人也不知道这是 iso 还是补丁包。
+	if filepath.Ext(final) == "" {
+		if ext := sniffExt(final); ext != "" {
+			newPath := final + ext
+			if _, err := os.Stat(newPath); os.IsNotExist(err) {
+				if err := os.Rename(final, newPath); err == nil {
+					j.mu.Lock()
+					j.FilePath = newPath
+					j.Name = filepath.Base(newPath)
+					j.mu.Unlock()
+				}
+			}
+		}
+	}
+}
+
+// sniffExt 按文件头猜扩展名。只做最有把握的几种：
+// exe(MZ) / dvp(DUMBVER) / iso(偏移 32768 的 CD001) / zip / 7z / rar / gz / pdf。
+func sniffExt(path string) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	head := make([]byte, 8)
+	n, _ := io.ReadFull(f, head)
+	head = head[:n]
+	switch {
+	case len(head) >= 2 && head[0] == 'M' && head[1] == 'Z':
+		return ".exe"
+	case len(head) >= 8 && string(head[:8]) == "DUMBVER\x01":
+		return ".dvp"
+	case len(head) >= 4 && string(head[:4]) == "PK\x03\x04":
+		return ".zip"
+	case len(head) >= 6 && string(head[:6]) == "7z\xbc\xaf\x27\x1c":
+		return ".7z"
+	case len(head) >= 4 && string(head[:4]) == "Rar!":
+		return ".rar"
+	case len(head) >= 3 && head[0] == 0x1f && head[1] == 0x8b && head[2] == 0x08:
+		return ".gz"
+	case len(head) >= 4 && string(head[:4]) == "%PDF":
+		return ".pdf"
+	}
+	// ISO9660：主卷描述符在扇区 16（32768），开头是 "CD001"
+	if fi, err := f.Stat(); err == nil && fi.Size() > 32773 {
+		buf := make([]byte, 5)
+		if _, err := f.ReadAt(buf, 32768); err == nil && string(buf) == "CD001" {
+			return ".iso"
+		}
+	}
+	return ""
 }
 
 func humanErr(err error) string {

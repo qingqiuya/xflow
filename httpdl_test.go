@@ -126,3 +126,38 @@ func TestUserAgentForSourceForge(t *testing.T) {
 		t.Fatalf("普通站点该用浏览器 UA: %s", ua)
 	}
 }
+
+// R2/S3 预签名直链把真名放在 query 里，2026-11-19 之前完全没解析。
+func TestFileNameFromQuery(t *testing.T) {
+	u := "https://edge2.abc.r2.cloudflarestorage.com/oNq/9e66425f" +
+		"?response-content-disposition=attachment%3B%20filename%3D%22cn_windows_7_ultimate_with_sp1_x64_dvd_u_677408.dvp%22" +
+		"&X-Amz-Signature=abc"
+	if got := fileNameFromURL(u); got != "cn_windows_7_ultimate_with_sp1_x64_dvd_u_677408.dvp" {
+		t.Fatalf("从 query 取真名失败，得到 %q", got)
+	}
+	// 没有 filename 参数的（buzzheavier）还是退回路径末段
+	if got := fileNameFromURL("https://ts.buzzheavier.com/d/goby1okwv117?v=xyz"); got != "goby1okwv117" {
+		t.Fatalf("期望 goby1okwv117，得到 %q", got)
+	}
+}
+
+func TestSniffExt(t *testing.T) {
+	dir := t.TempDir()
+	iso := filepath.Join(dir, "a")
+	buf := make([]byte, 40000)
+	copy(buf[32768:], "CD001")
+	os.WriteFile(iso, buf, 0644)
+	if got := sniffExt(iso); got != ".iso" {
+		t.Fatalf("iso 没认出来，得到 %q", got)
+	}
+	dvp := filepath.Join(dir, "b")
+	os.WriteFile(dvp, append([]byte("DUMBVER\x01"), make([]byte, 100)...), 0644)
+	if got := sniffExt(dvp); got != ".dvp" {
+		t.Fatalf("dvp 没认出来，得到 %q", got)
+	}
+	exe := filepath.Join(dir, "c")
+	os.WriteFile(exe, []byte("MZ\x90\x00"), 0644)
+	if got := sniffExt(exe); got != ".exe" {
+		t.Fatalf("exe 没认出来，得到 %q", got)
+	}
+}
