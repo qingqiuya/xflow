@@ -202,6 +202,16 @@ func registerDiscoveryAPI(mux *http.ServeMux) {
 }
 
 func localIPv4() string {
+	// 先问内核：去公网走哪张网卡出手（UDP dial 不发包，只查路由）。
+	// 多网卡机器（G55：enp1s0 172.16.0.12 挂着网线没通 + enp2s0 10.11.11.12）
+	// 只有这种问法才稳，靠 InterfaceAddrs 顺序纯拼运气。
+	if c, err := net.Dial("udp4", "223.5.5.5:53"); err == nil {
+		if ua, ok := c.LocalAddr().(*net.UDPAddr); ok && ua.IP != nil && !ua.IP.IsLoopback() {
+			c.Close()
+			return ua.IP.To4().String()
+		}
+		c.Close()
+	}
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {
 		return ""

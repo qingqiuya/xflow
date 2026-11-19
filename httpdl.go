@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -41,6 +42,68 @@ func fileNameFromURL(u string) string {
 	}
 	base = regexp.MustCompile(`[\\/:*?"<>|]`).ReplaceAllString(base, "_")
 	return base
+}
+
+// filenameFromDisposition 从 Content-Disposition 里取文件名。
+// 支持 filename="x.iso" 和 RFC 5987 的 filename*=UTF-8”x.iso。
+// 很多直链（Cloudflare R2、网盘中转、buzzheavier）URL 里只有一串 hash，真名藏在这个头里。
+func filenameFromDisposition(cd string) string {
+	if cd == "" {
+		return ""
+	}
+	lower := strings.ToLower(cd)
+	if i := strings.Index(lower, "filename*="); i >= 0 {
+		v := cd[i+len("filename*="):]
+		if j := strings.IndexByte(v, ';'); j >= 0 {
+			v = v[:j]
+		}
+		v = strings.TrimSpace(strings.Trim(v, `"`))
+		if k := strings.Index(v, "''"); k >= 0 {
+			v = v[k+2:]
+		}
+		if dec, err := url.PathUnescape(v); err == nil && dec != "" {
+			return safeFileName(dec)
+		}
+	}
+	if i := strings.Index(lower, "filename="); i >= 0 {
+		v := cd[i+len("filename="):]
+		if j := strings.IndexByte(v, ';'); j >= 0 {
+			v = v[:j]
+		}
+		v = strings.TrimSpace(strings.Trim(v, `"`))
+		if v != "" {
+			return safeFileName(v)
+		}
+	}
+	return ""
+}
+
+func safeFileName(s string) string {
+	s = filepath.Base(strings.ReplaceAll(s, "\\", "/"))
+	s = regexp.MustCompile(`[:*?"<>|\x00-\x1f]`).ReplaceAllString(s, "_")
+	s = strings.TrimSpace(s)
+	if s == "" || s == "." || s == ".." {
+		return ""
+	}
+	return s
+}
+
+// looksLikeHashName 判断名字是不是一串看不出含义的 id（无扩展名的纯 hex）。
+// 是的话优先用 Content-Disposition 给的真名。
+func looksLikeHashName(name string) bool {
+	if filepath.Ext(name) != "" {
+		return false
+	}
+	if len(name) < 16 {
+		return false
+	}
+	for _, r := range name {
+		ok := (r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')
+		if !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // applyHeaders 把插件转进来的头（Referer / Cookie 等）加到请求上。
@@ -208,6 +271,22 @@ func startHTTP(j *Job) {
 	if resp.StatusCode >= 400 {
 		setState("error", fmt.Sprintf("HTTP %d（源站拒绝：防盗链或 UA 校验）", resp.StatusCode))
 		return
+	}
+
+	// 文件名修正：URL 里只是 hash 时，用 Content-Disposition 给的真名。
+	// 只在还没开始下（没有 .part）时改名，避免丢掉已下的进度。
+	if looksLikeHashName(name) {
+		if realName := filenameFromDisposition(resp.Header.Get("Content-Disposition")); realName != "" && realName != name {
+			if _, serr := os.Stat(part); serr != nil {
+				finalPath = uniquePath(dir, realName)
+				part = finalPath + ".part"
+				j.mu.Lock()
+				j.FilePath = finalPath
+				j.Name = realName
+				j.mu.Unlock()
+				name = realName
+			}
+		}
 	}
 
 	size := resp.ContentLength

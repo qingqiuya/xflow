@@ -33,6 +33,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/anacrolix/torrent/metainfo"
 	webview "github.com/webview/webview_go"
@@ -316,27 +317,86 @@ func main() {
 		json.NewEncoder(w).Encode(map[string]any{"dir": currentDir()})
 	})
 
+	// 目录选择框的数据源：跟 Windows 版同一个契约（ui.html 读 dirs[].path /
+	// shortcuts / parent）。★2026-11-17 之前这里返回的是 items[{name,dir}]，
+	// Linux 上「下载目录」对话框永远是空的、点确定还 404 —— 这次补齐。
 	mux.HandleFunc("/api/browse", func(w http.ResponseWriter, r *http.Request) {
-		p := r.URL.Query().Get("path")
-		if p == "" {
-			p = mustHome()
-		}
-		ents, err := os.ReadDir(p)
-		if err != nil {
-			json.NewEncoder(w).Encode(map[string]any{"ok": false, "err": err.Error()})
-			return
-		}
-		type item struct {
+		p := strings.TrimSpace(r.URL.Query().Get("path"))
+		type ent struct {
 			Name string `json:"name"`
-			Dir  bool   `json:"dir"`
+			Path string `json:"path"`
 		}
-		var items []item
-		for _, e := range ents {
-			items = append(items, item{Name: e.Name(), Dir: e.IsDir()})
+		var dirs []ent
+		parent := ""
+		shortcuts := map[string]string{}
+		h := mustHome()
+		for _, kv := range [][2]string{
+			{"桌面", filepath.Join(h, "Desktop")},
+			{"下载", filepath.Join(h, "Downloads")},
+			{"文档", filepath.Join(h, "Documents")},
+			{"图片", filepath.Join(h, "Pictures")},
+			{"视频", filepath.Join(h, "Videos")},
+			{"用户主目录", h},
+		} {
+			if isDir(kv[1]) {
+				shortcuts[kv[0]] = kv[1]
+			}
+		}
+		if p == "" {
+			// 空路径 = 根：给「/」+ 常见挂载点的顶层目录（Linux 没有盘符）
+			dirs = append(dirs, ent{Name: "/", Path: "/"})
+			for _, base := range []string{"/mnt", "/media", "/data"} {
+				ents, err := os.ReadDir(base)
+				if err != nil {
+					continue
+				}
+				for _, e := range ents {
+					if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
+						continue
+					}
+					dirs = append(dirs, ent{Name: base + "/" + e.Name(), Path: filepath.Join(base, e.Name())})
+				}
+			}
+		} else {
+			ents, err := os.ReadDir(p)
+			if err != nil {
+				json.NewEncoder(w).Encode(map[string]any{"ok": false, "err": err.Error(), "path": p})
+				return
+			}
+			for _, e := range ents {
+				if !e.IsDir() {
+					continue
+				}
+				n := e.Name()
+				if strings.HasPrefix(n, ".") {
+					continue
+				}
+				dirs = append(dirs, ent{Name: n, Path: filepath.Join(p, n)})
+			}
+			parent = filepath.Dir(p)
+			if parent == "/" {
+				parent = ""
+			}
 		}
 		json.NewEncoder(w).Encode(map[string]any{
-			"ok": true, "path": p, "parent": filepath.Dir(p), "items": items,
+			"ok": true, "path": p, "parent": parent, "dirs": dirs,
+			"current": currentDir(), "shortcuts": shortcuts,
 		})
+	})
+
+	// 界面里点「确定」用的就是这个（Windows 版一直有，Linux 版漏了）
+	mux.HandleFunc("/api/setdir", func(w http.ResponseWriter, r *http.Request) {
+		var d struct {
+			Dir string `json:"dir"`
+		}
+		json.NewDecoder(r.Body).Decode(&d)
+		if d.Dir != "" && isDir(d.Dir) {
+			defaultDirOverride = d.Dir
+			saveDefaultDir(d.Dir)
+			json.NewEncoder(w).Encode(map[string]any{"ok": true, "dir": d.Dir})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{"ok": false, "err": "目录不存在"})
 	})
 
 	// 上传本地种子文件：按内容校验，不看后缀
@@ -394,9 +454,24 @@ func main() {
 	})
 
 	// 默认只听本机回环；设置里可以改成局域网（会自动带 token 校验）
+	//
+	// ★2026-11-17：端口被占（典型场景：systemd user 服务已经跑着，用户又点了
+	// 桌面图标 / 命令行的 xflow）时，以前直接“监听失败”退出，窗口不出来。
+	// 现在先探一下 127.0.0.1:<port>/healthz —— 是自己的就把窗口接上去（等同
+	// --window-only），不是才报错。
+	hasDisplay := os.Getenv("DISPLAY") != "" || os.Getenv("WAYLAND_DISPLAY") != ""
 	addr := listenAddr(*port)
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
+		if ownServiceListening(*port) {
+			// 已经有一份在跑：有图形就把界面接上去，没有就无声退出（systemd 重启
+			// / 连点两次图标都不该报错弹窗）。
+			fmt.Printf("已有汐流在 %d 端口上跑。\n", *port)
+			if hasDisplay {
+				runWindowClient(*port)
+			}
+			return
+		}
 		fmt.Fprintf(os.Stderr, "监听 %s 失败：%v\n", addr, err)
 		os.Exit(1)
 	}
@@ -414,21 +489,22 @@ func main() {
 	}()
 
 	needTok := loadSettings().Listen == "lan"
+	currentPort = *port // 设置页要显示真实端口（重启监听也靠它）
+	// 路由必须先注册完再 Serve：设置页切「仅本机/局域网」会重绑监听并起第二个
+	// Serve，跟这里并发往同一个 mux 注册就是 map 竞态（2026-11-17 收拾）。
+	// 互传（汐港搬过来的）：/api/fs /api/download /api/upload /api/send /api/incoming /api/share
+	registerShare(mux)
+	registerClipboard(mux)
 	setAPIListener(ln, mux)
 	go func() {
 		// 局域网发现（mDNS）：注册自己 + 浏览手机等设备
 		startDiscovery(*port, needTok)
 		defer stopDiscovery()
-		// 互传（汐港搬过来的）：/api/fs /api/download /api/upload /api/send /api/incoming /api/share
-		registerShare(mux)
-		registerClipboard(mux)
 		if err := http.Serve(ln, withCORS(guardMux(mux, needTok))); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
 	}()
-
-	hasDisplay := os.Getenv("DISPLAY") != "" || os.Getenv("WAYLAND_DISPLAY") != ""
 
 	switch {
 	case *headless || (!hasDisplay && !*browser):
@@ -447,6 +523,24 @@ func main() {
 		w.Run()
 		mgr.save()
 	}
+}
+
+// ownServiceListening 探一下这个端口上是不是已经在跑的汐流（自己的服务）。
+func ownServiceListening(port int) bool {
+	c := http.Client{Timeout: 800 * time.Millisecond}
+	resp, err := c.Get("http://127.0.0.1:" + strconv.Itoa(port) + "/healthz")
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return false
+	}
+	var v struct {
+		OK      bool   `json:"ok"`
+		Version string `json:"version"`
+	}
+	return json.NewDecoder(resp.Body).Decode(&v) == nil && v.OK
 }
 
 func orDefault(s, d string) string {

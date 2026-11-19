@@ -103,20 +103,12 @@ func itoa(n int) string {
 	return string(b[i:])
 }
 
-// lanIP 找本机的局域网 IPv4（给设置页显示"别人该连哪个地址"）。
+// lanIP 本机局域网 IPv4（给设置页/互传页显示「别人该连哪个地址」）。
+// ★2026-11-17：以前直接取第一个非回环地址 —— G55 这种多网卡机器会拿到
+// enp1s0 的 172.16.0.12（NO-CARRIER，根本没连），手机照这个地址连就死了。
+// 改为用 discovery.go 的 localIPv4()：排除 172./100./169.254. 并优先带默认路由的网卡。
 func lanIP() string {
-	addrs, err := net.InterfaceAddrs()
-	if err != nil {
-		return ""
-	}
-	for _, a := range addrs {
-		if ipn, ok := a.(*net.IPNet); ok && !ipn.IP.IsLoopback() {
-			if ip4 := ipn.IP.To4(); ip4 != nil {
-				return ip4.String()
-			}
-		}
-	}
-	return ""
+	return localIPv4()
 }
 
 // isLoopbackReq 判断请求是否来自本机回环
