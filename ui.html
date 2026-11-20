@@ -363,15 +363,36 @@ document.getElementById('shAddrToggle').onclick = () => {
 document.getElementById('shAddrAdd').onclick = () => {
   let v = document.getElementById('shAddr').value.trim();
   if(!v) return;
-  // 支持手机那边一键复制的整串：ip:port?token=xxxx（IP、端口、令牌一次粘完）
+  // 这一栏现在能吃好几种写法（手机那边长按复制出来的就是 ip:令牌）：
+  //   10.11.11.100                     只 IP，端口默认 17777
+  //   10.11.11.100:17777               带端口
+  //   10.11.11.100:0d724c43...         IP + 令牌（端口默认）
+  //   10.11.11.100:17777:0d724c43...   IP + 端口 + 令牌
+  //   10.11.11.100?token=0d724c43...   URL 风格
+  //   [240e::1] / [240e::1]:17777      IPv6
   let tok = '';
   const qi = v.indexOf('?token=');
   if (qi >= 0) { tok = v.slice(qi + 7).trim(); v = v.slice(0, qi).trim(); }
-  const m = v.match(/^\[?([^\]]+)\]?:(\d+)$/);
   let ip = v, port = 17777;
-  if (m) { ip = m[1]; port = parseInt(m[2], 10); }
-  else if (/^\[?[^\]]+\]?$/.test(v)) { ip = v.replace(/^\[|\]$/g, ''); }
-  else { return alert('写成 10.11.11.100 或 10.11.11.100:17777 或 10.11.11.100:17777?token=xxx'); }
+  if (v.startsWith('[')) {
+    const close = v.indexOf(']');
+    if (close < 0) return alert('IPv6 要写成 [240e::1] 或 [240e::1]:17777');
+    ip = v.slice(1, close);
+    const rest = v.slice(close + 1).replace(/^:/, '');
+    if (rest) { if (/^\d+$/.test(rest)) port = parseInt(rest, 10); else tok = tok || rest; }
+  } else if (v.split(':').length === 1) {
+    ip = v;
+  } else {
+    const seg = v.split(':');
+    ip = seg[0];
+    const second = seg[1];
+    if (/^\d+$/.test(second) && parseInt(second, 10) <= 65535) {
+      port = parseInt(second, 10);
+      if (seg.length > 2) tok = tok || seg.slice(2).join(':');
+    } else {
+      tok = tok || seg.slice(1).join(':');
+    }
+  }
   if (tok) shSaveTok(ip, tok);
   const list = shManual();
   list.push({ip, port});

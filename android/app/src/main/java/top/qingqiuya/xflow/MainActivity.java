@@ -436,20 +436,29 @@ public class MainActivity extends Activity {
         body.setTypeface(android.graphics.Typeface.MONOSPACE);
         body.setTextIsSelectable(true);
         body.setPadding(0, dp(14), 0, dp(6));
+        // 一整串：ip:令牌（长按可选中复制，不依赖程序写剪贴板 —— MIUI 会拦）
         TextView allRow = new TextView(this);
-        allRow.setText("地址+令牌  " + ip + ":" + port + "?token=" + tok + "  （点一下复制，粘到桌面「手动加地址」直接能发）");
+        allRow.setText(ip + ":" + tok);
         allRow.setTextColor(0xFF3DDC84);
-        allRow.setTextSize(12f);
-        allRow.setTypeface(android.graphics.Typeface.MONOSPACE);
+        allRow.setTextSize(14f);
+        allRow.setTypeface(android.content.res.Resources.getSystem() == null
+                ? null : android.graphics.Typeface.MONOSPACE);
         allRow.setBackgroundResource(R.drawable.chip_bg);
         allRow.setPadding(dp(10), dp(9), dp(10), dp(9));
+        allRow.setTextIsSelectable(true);
         LinearLayout.LayoutParams alp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         alp.topMargin = dp(6);
         alp.bottomMargin = dp(6);
         allRow.setLayoutParams(alp);
-        allRow.setOnClickListener(v -> copyText(ip + ":" + port + "?token=" + tok));
         box.addView(allRow);
+
+        TextView allTip = new TextView(this);
+        allTip.setText("↑ 长按选中上面这串（ip:令牌），复制后粘到桌面「手动加地址」就能发；只粘 IP 也行。");
+        allTip.setTextColor(0xFF8B93A7);
+        allTip.setTextSize(11f);
+        allTip.setPadding(0, 0, 0, dp(8));
+        box.addView(allTip);
 
         TextView tokRow = new TextView(this);
         tokRow.setText("令牌  " + tok + "  （点一下复制）");
