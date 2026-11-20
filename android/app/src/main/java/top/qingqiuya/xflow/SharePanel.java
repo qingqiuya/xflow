@@ -176,6 +176,22 @@ public class SharePanel {
                 list.addAll(Beacon.PEERS.values());
             }
             list.addAll(manual);
+            // LocalSend 设备（别人手机/电脑上装的官方客户端）：组播里见到的
+            synchronized (LocalSendServer.PEERS) {
+                for (LocalSendServer.LsPeer lp : LocalSendServer.PEERS) {
+                    boolean dup = false;
+                    for (Beacon.Peer p : list) {
+                        if (p.ip.equals(lp.ip)) { dup = true; break; }
+                    }
+                    if (dup) continue;
+                    Beacon.Peer p = new Beacon.Peer();
+                    p.name = lp.name;
+                    p.ip = lp.ip;
+                    p.port = lp.port;
+                    p.platform = "localsend";
+                    list.add(p);
+                }
+            }
             StringBuilder sig = new StringBuilder();
             for (Beacon.Peer p : list) sig.append(p.ip).append(':').append(p.port).append(',');
             if (!sig.toString().equals(lastDevSig)) {
@@ -221,7 +237,7 @@ public class SharePanel {
             n.setTextColor(Color.parseColor("#e8ebf2"));
             n.setTextSize(14f);
             TextView a = new TextView(act);
-            a.setText(p.ip + ":" + p.port + ("manual".equals(p.platform) ? "　手动" : ""));
+            a.setText(p.ip);
             a.setTextColor(Color.parseColor("#8b93a7"));
             a.setTextSize(11.5f);
             texts.addView(n);
@@ -236,7 +252,7 @@ public class SharePanel {
 
             row.setOnClickListener(v -> {
                 target = p;
-                targetText.setText(p.name + "\n" + p.ip + ":" + p.port);
+                targetText.setText(p.name + "\n" + p.ip);
                 renderDevices(list);
                 say("");
             });
@@ -377,6 +393,16 @@ public class SharePanel {
 
     /** 把 content:// 或 file:// 的流直接推到目标设备（选文件/收件箱转手都用它）。 */
     private void uploadFromUri(Uri uri, String name, long size, Beacon.Peer t) {
+        // LocalSend 设备走它自己的协议（prepare-upload → upload），不是我们的 /api/upload
+        if ("localsend".equals(t.platform)) {
+            try (InputStream in = act.getContentResolver().openInputStream(uri)) {
+                String err = LocalSendServer.sendTo(t.ip, t.port, in, name, size);
+                ui.post(() -> say(err == null ? ("已发送：" + name + " → " + t.name) : ("失败：" + err)));
+            } catch (Exception e) {
+                ui.post(() -> say("失败：" + e.getMessage()));
+            }
+            return;
+        }
         try {
             String url = "http://" + hostOf(t) + ":" + t.port + "/api/upload";
             HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();

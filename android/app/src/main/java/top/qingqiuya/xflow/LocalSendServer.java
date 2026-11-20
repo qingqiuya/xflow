@@ -59,6 +59,36 @@ public class LocalSendServer {
 
     private final Map<String, Session> sessions = new HashMap<>();
 
+    /** 组播里见过的 LocalSend 设备（给 SharePanel 显示用）。 */
+    public static class LsPeer {
+        public String name = "";
+        public String ip = "";
+        public int port = PORT;
+        public long lastSeen = System.currentTimeMillis();
+    }
+
+    public static final java.util.List<LsPeer> PEERS = new java.util.ArrayList<>();
+
+    private static void rememberPeer(String name, String ip, int port) {
+        synchronized (PEERS) {
+            long now = System.currentTimeMillis();
+            PEERS.removeIf(p -> now - p.lastSeen > 120000);
+            for (LsPeer p : PEERS) {
+                if (p.ip.equals(ip)) {
+                    p.name = name;
+                    p.port = port;
+                    p.lastSeen = now;
+                    return;
+                }
+            }
+            LsPeer p = new LsPeer();
+            p.name = name;
+            p.ip = ip;
+            p.port = port;
+            PEERS.add(p);
+        }
+    }
+
     public LocalSendServer(Context ctx) {
         this.ctx = ctx.getApplicationContext();
     }
@@ -121,6 +151,7 @@ public class LocalSendServer {
                     // 对方在喊：回一个 register，让它在设备列表里看到我们
                     final String ip = p.getAddress().getHostAddress();
                     final int port = o.optInt("port", PORT);
+                    rememberPeer(o.optString("alias", ip), ip, port);
                     new Thread(() -> registerBack(ip, port), "ls-reg").start();
                 } catch (Exception e) {
                     if (!running) return;
@@ -446,6 +477,84 @@ public class LocalSendServer {
             return URLEncoder.encode(s, "UTF-8");
         } catch (Exception e) {
             return s;
+        }
+    }
+
+    /** 按 LocalSend v2 协议把文件推给对方（prepare-upload → upload）。返回 null 表示成功，否则是错误信息。 */
+    public static String sendTo(String ip, int port, java.io.InputStream in, String name, long size) {
+        try {
+            String base = "http://" + ip + ":" + port + "/api/localsend/v2";
+            String fileId = Long.toHexString(System.nanoTime());
+            JSONObject meta = new JSONObject();
+            meta.put("id", fileId);
+            meta.put("fileName", name);
+            meta.put("size", size);
+            meta.put("fileType", "application/octet-stream");
+            JSONObject files = new JSONObject();
+            files.put(fileId, meta);
+            JSONObject info = new JSONObject();
+            info.put("alias", "XFlow 手机");
+            info.put("version", "2.1");
+            info.put("deviceModel", android.os.Build.MODEL == null ? "Android" : android.os.Build.MODEL);
+            info.put("deviceType", "mobile");
+            info.put("fingerprint", "xflow-mobile-" + Long.toHexString(System.nanoTime()));
+            info.put("port", PORT);
+            info.put("protocol", "http");
+            JSONObject body = new JSONObject();
+            body.put("info", info);
+            body.put("files", files);
+
+            java.net.HttpURLConnection c = (java.net.HttpURLConnection)
+                    new java.net.URL(base + "/prepare-upload").openConnection();
+            c.setRequestMethod("POST");
+            c.setDoOutput(true);
+            c.setConnectTimeout(8000);
+            c.setReadTimeout(15000);
+            c.setRequestProperty("Content-Type", "application/json");
+            byte[] bb = body.toString().getBytes("UTF-8");
+            c.setFixedLengthStreamingMode(bb.length);
+            try (java.io.OutputStream o = c.getOutputStream()) {
+                o.write(bb);
+            }
+            int code = c.getResponseCode();
+            if (code != 200) {
+                c.disconnect();
+                return "对方拒绝（HTTP " + code + "）";
+            }
+            java.io.InputStream ri = c.getInputStream();
+            ByteArrayOutputStream rb = new ByteArrayOutputStream();
+            byte[] tmp = new byte[4096];
+            int rn;
+            while ((rn = ri.read(tmp)) > 0) rb.write(tmp, 0, rn);
+            ri.close();
+            c.disconnect();
+            JSONObject resp = new JSONObject(new String(rb.toByteArray(), "UTF-8"));
+            String sid = resp.optString("sessionId", "");
+            JSONObject tk = resp.optJSONObject("files");
+            String tok = tk == null ? "" : tk.optString(fileId, "");
+            if (sid.isEmpty() || tok.isEmpty()) return "对方没给 session/token";
+
+            String up = base + "/upload?sessionId=" + URLEncoder.encode(sid, "UTF-8")
+                    + "&fileId=" + URLEncoder.encode(fileId, "UTF-8")
+                    + "&token=" + URLEncoder.encode(tok, "UTF-8");
+            java.net.HttpURLConnection c2 = (java.net.HttpURLConnection) new java.net.URL(up).openConnection();
+            c2.setRequestMethod("POST");
+            c2.setDoOutput(true);
+            c2.setConnectTimeout(10000);
+            c2.setReadTimeout(600000);
+            c2.setRequestProperty("Content-Type", "application/octet-stream");
+            if (size > 0) c2.setFixedLengthStreamingMode(size);
+            else c2.setChunkedStreamingMode(64 * 1024);
+            try (java.io.OutputStream out = c2.getOutputStream()) {
+                byte[] buf = new byte[64 * 1024];
+                int n;
+                while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+            }
+            int code2 = c2.getResponseCode();
+            c2.disconnect();
+            return code2 == 200 ? null : ("上传失败（HTTP " + code2 + "）");
+        } catch (Exception e) {
+            return String.valueOf(e.getMessage());
         }
     }
 }
