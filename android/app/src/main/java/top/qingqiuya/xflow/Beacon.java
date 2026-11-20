@@ -56,6 +56,19 @@ public class Beacon {
         if (n != null && !n.trim().isEmpty()) selfName = n.trim().replace(' ', '_');
     }
 
+    /** 当前实例：界面上的「刷新」要用它重新扫一遍。 */
+    public static Beacon CURRENT;
+
+    /** 重新扫一次：停掉 mDNS 发现再开，设备列表会重建。 */
+    public synchronized void restart() {
+        try {
+            if (nsd != null && discListener != null) nsd.stopServiceDiscovery(discListener);
+        } catch (Exception ignored) {
+        }
+        discListener = null;
+        discover();
+    }
+
     public boolean isRunning() {
         return running;
     }
@@ -68,6 +81,7 @@ public class Beacon {
             return;
         }
         selfPort = apiPort;
+        CURRENT = this;
         running = true;
         register();
         discover();

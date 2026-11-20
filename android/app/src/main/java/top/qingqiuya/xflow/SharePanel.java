@@ -118,6 +118,19 @@ public class SharePanel {
         addrInput = root.findViewById(R.id.addrInput);
 
         root.findViewById(R.id.addrAdd).setOnClickListener(v -> addManual());
+        android.view.View refresh = root.findViewById(R.id.devRefresh);
+        if (refresh != null) {
+            refresh.setOnClickListener(v -> {
+                // 手动重扫：清掉已知设备，让 mDNS 发现和 LocalSend 组播重新来一遍
+                synchronized (Beacon.PEERS) { Beacon.PEERS.clear(); }
+                synchronized (LocalSendServer.PEERS) { LocalSendServer.PEERS.clear(); }
+                if (Beacon.CURRENT != null) Beacon.CURRENT.restart();
+                lastDevSig = "";
+                refreshDevices();
+                say("正在重新查找设备…");
+            });
+        }
+
         final android.widget.Button pickBtn = root.findViewById(R.id.pickFile);
         pickBtn.setOnClickListener(v -> pickFile());
         this.pickBtn = pickBtn;

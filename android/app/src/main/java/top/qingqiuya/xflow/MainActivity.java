@@ -723,7 +723,7 @@ public class MainActivity extends Activity {
                 statText.setText(s);
             }
 
-            renderPeers();
+            // 下载页不显示设备列表（清秋 2026-11-21 要求：这些信息在互传页看就够了）
 
             // 数量变了就重建，否则原地更新
             if (jobList.getChildCount() != jobs.size()) {

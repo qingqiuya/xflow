@@ -39,15 +39,37 @@
                     android:paddingTop="4dp" />
             </LinearLayout>
 
-            <!-- 设备 -->
-            <TextView
-                android:layout_width="wrap_content"
+            <!-- 设备：标题 + 刷新（重新扫描一遍） -->
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="设备（自动发现）"
-                android:textColor="#8b93a7"
-                android:textSize="12sp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
                 android:paddingTop="6dp"
-                android:paddingBottom="8dp" />
+                android:paddingBottom="8dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="设备（自动发现）"
+                    android:textColor="#8b93a7"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1" />
+
+                <TextView
+                    android:id="@+id/devRefresh"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="刷新"
+                    android:textColor="#7fd4ff"
+                    android:textSize="12sp"
+                    android:paddingHorizontal="8dp"
+                    android:paddingVertical="2dp" />
+            </LinearLayout>
 
             <LinearLayout
                 android:id="@+id/devicesBox"
