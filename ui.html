@@ -452,7 +452,7 @@ function renderDevCards(){
       +'<span class="av">'+av+'</span>'
       +'<div class="dn-wrap"><div class="dn">'+esc(nm)+'</div>'
       +'<div class="di">'+esc(p.ip)+'</div></div>'
-      +'<span class="pick">已选</span></div>';
+      +'<span class="pick">取消</span></div>';
   }).join('');
   if(lsPeers.length){
     box.innerHTML += lsPeers.map((p,i)=>{
@@ -464,7 +464,18 @@ function renderDevCards(){
     }).join('');
   }
   box.querySelectorAll('.devcard[data-i]').forEach(el=>{
-    el.onclick=()=>pickSharePeer(parseInt(el.dataset.i,10));
+    el.onclick=()=>{
+      const p=shPeers[parseInt(el.dataset.i,10)];
+      // 再点已选中的那台 = 取消选中（以前只能改选别的，取消不了）
+      if(p && shPeer && shPeer.ip===p.ip && shPeer.port===p.port){
+        shPeer=null;
+        const dt=document.getElementById('dropTo');
+        if(dt) dt.textContent='先选上面一台设备';
+        renderDevCards();
+        return;
+      }
+      pickSharePeer(parseInt(el.dataset.i,10));
+    };
   });
   box.querySelectorAll('.devcard[data-ls]').forEach(el=>{
     el.onclick=()=>{

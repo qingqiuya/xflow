@@ -258,16 +258,23 @@ public class SharePanel {
             row.addView(texts);
 
             TextView tag = new TextView(act);
-            tag.setText(on ? "已选" : "选它");
+            tag.setText(on ? "取消" : "选它");
             tag.setTextColor(on ? Color.parseColor("#3ddc84") : Color.parseColor("#7fd4ff"));
             tag.setTextSize(12.5f);
             row.addView(tag);
 
             row.setOnClickListener(v -> {
-                target = p;
-                targetText.setText(p.name + "\n" + p.ip);
+                if (on) {
+                    // 再点一次取消：之前选中后没法取消，只能选别的
+                    target = null;
+                    targetText.setText("还没选设备 —— 下面点一个");
+                    say("");
+                } else {
+                    target = p;
+                    targetText.setText(p.name + "\n" + p.ip);
+                    say("");
+                }
                 renderDevices(list);
-                say("");
             });
             row.setOnLongClickListener(v -> {
                 if ("manual".equals(p.platform)) {
