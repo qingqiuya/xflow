@@ -68,7 +68,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:hint="手动加地址：[240e:…]:17777 或 1.2.3.4:17777"
+                    android:hint="手动加地址：1.2.3.4（端口默认 17777）"
                     android:textSize="12.5sp"
                     android:singleLine="true"
                     android:inputType="text"

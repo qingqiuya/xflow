@@ -121,7 +121,7 @@ public class SharePanel {
         if (s.isEmpty()) return;
         Beacon.Peer p = parseAddr(s);
         if (p == null) {
-            say("地址格式不对，写成 [240e:…]:17777 或 1.2.3.4:17777");
+            say("地址认不出来，写成 1.2.3.4（端口默认 17777）或 1.2.3.4:17777");
             return;
         }
         for (Beacon.Peer x : manual) {
@@ -156,12 +156,15 @@ public class SharePanel {
             ip = s; // 裸 v6
         } else {
             int c = s.lastIndexOf(':');
-            if (c < 0) return null;
-            ip = s.substring(0, c);
-            try {
-                port = Integer.parseInt(s.substring(c + 1).trim());
-            } catch (Exception e) {
-                return null;
+            if (c < 0) {
+                ip = s;   // 只填了 IP：端口用默认 17777，不用非得写出来
+            } else {
+                ip = s.substring(0, c);
+                try {
+                    port = Integer.parseInt(s.substring(c + 1).trim());
+                } catch (Exception e) {
+                    return null;
+                }
             }
         }
         if (ip.isEmpty() || port <= 0 || port > 65535) return null;
