@@ -140,8 +140,9 @@ button:active{transform:scale(.97)}
 .tiny{background:#1c2230;color:var(--fg);padding:6px 12px;font-size:12px;font-weight:500;border-radius:8px;border:0;cursor:pointer}
 .tiny:hover{background:#242c3d}
 .cliprow{display:flex;gap:7px;align-items:center;margin-top:4px}
-.cliprow input{flex:1;padding:8px 11px;font-size:12.5px;background:#0f1420;border:1px solid var(--line);border-radius:8px;color:var(--fg);outline:none}
-.cliprow input:focus{border-color:var(--acc)}
+.clipbox{margin-top:10px}
+.clipbox textarea{width:100%;box-sizing:border-box;margin-top:7px;padding:10px 12px;font-size:12.5px;line-height:1.6;background:#0f1420;border:1px solid var(--line);border-radius:9px;color:var(--fg);outline:none;resize:vertical;font-family:inherit}
+.clipbox textarea:focus{border-color:var(--acc)}
 .pbar{height:5px;border-radius:99px;background:#1e2634;margin:12px auto 0;max-width:420px;overflow:hidden;display:none}
 .pbar.on{display:block}
 .pbar i{display:block;height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,#5cc9ff,#3ddc84);transition:width .12s}
@@ -299,22 +300,23 @@ button:active{transform:scale(.97)}
       <button class="primary sm" id="shQSend">发送</button></div>
   </div>
 
-  <!-- 收件箱 -->
-  <div class="sec">
+  <!-- 剪贴板 / 文字（多行，发一段话不用挤在一行里） -->
+  <div class="clipbox">
+    <div class="cliprow">
+      <button class="tiny" id="shClipSend">发本机剪贴板</button>
+      <span class="grow" style="flex:1"></span>
+      <button class="tiny" id="shTextSend">发送文字</button>
+    </div>
+    <textarea id="shText" rows="4" placeholder="粘一段文字给对面（多行也行）"></textarea>
+  </div>
+  <!-- 收件箱：放最后，历史多了也顶不到输入框 -->
+  <div class="sec" style="margin-top:14px">
     <div class="sec-hd">收件箱
       <span class="grow" style="flex:1"></span>
       <button class="tiny" id="shInboxClear" title="把收件目录里的文件全删掉">清空</button>
       <label class="sw" style="margin-left:10px"><input type="checkbox" id="shAuto"><i></i>自动收</label>
     </div>
     <div class="inbox" id="shInbox"></div>
-  </div>
-
-  <!-- 剪贴板 -->
-  <div class="cliprow">
-    <button class="tiny" id="shClipSend">发剪贴板</button>
-    <button class="tiny" id="shClipGet">取剪贴板</button>
-    <input id="shText" placeholder="或者打一段文字发过去">
-    <button class="tiny" id="shTextSend">发送</button>
   </div>
   <div class="msgline" id="shMsg"></div>
   <input type="file" id="shFile" multiple style="position:fixed;left:-3000px;width:1px;height:1px;opacity:0">
@@ -870,21 +872,14 @@ document.getElementById('shClipSend').onclick=async()=>{
   if(!t){ t=prompt('读不到本机剪贴板（浏览器限制），粘在这儿发出去：','')||'' }
   await shSendText(t);
 };
-document.getElementById('shClipGet').onclick=async()=>{
-  const r=await shFetchText();
-  if(!r) return;
-  if(!r.ok){ shMsgShow('失败：'+(r.err||'')); return }
-  const t=r.text||'';
-  try{ await navigator.clipboard.writeText(t); shMsgShow('已复制到本机剪贴板（'+t.length+' 字）') }
-  catch(e){ prompt('对方剪贴板里的内容，手动复制：', t) }
-};
 document.getElementById('shTextSend').onclick=async()=>{
   const el=document.getElementById('shText');
   await shSendText(el.value);
   el.value='';
 };
 document.getElementById('shText').addEventListener('keydown',e=>{
-  if(e.key==='Enter'){ e.preventDefault(); document.getElementById('shTextSend').click(); }
+  // 多行输入：Enter 就是换行，Ctrl/Cmd+Enter 才发
+  if(e.key==='Enter' && (e.ctrlKey || e.metaKey)){ e.preventDefault(); document.getElementById('shTextSend').click(); }
 });
 // 自动接收开关 + 待确认（有人推文件过来时在这条上显示「接收/拒绝」）
 async function shRefreshAuto(){
