@@ -73,6 +73,18 @@ public class ApiServer {
         return token;
     }
 
+    private volatile boolean apiEnabled = false;
+
+    /** API 开关：只管「外部能不能调我的控制接口」（/api/jobs、/api/add…）。
+     *  互传路径不受它影响 —— 互传该开就是开，别把两件事绑在一起。 */
+    public void setApiEnabled(boolean b) {
+        apiEnabled = b;
+    }
+
+    public boolean isApiEnabled() {
+        return apiEnabled;
+    }
+
     /** 互传开关：关掉之后 /api/fs /api/upload 这些一律拒绝。 */
     public void setShareEnabled(boolean b) {
         shareEnabled = b;
@@ -174,6 +186,10 @@ public class ApiServer {
             // 只有「同一局域网（私有地址）」来的互传请求才免令牌。
             // 公网来的（比如以后开了端口映射/DDNS）一律要令牌 —— 清秋 2026-11-16 定。
             boolean lanPeer = isPrivateAddr(sock.getInetAddress());
+            if (!sharePath && !apiEnabled) {
+                writeResponse(sock, 403, "{\"ok\":false,\"err\":\"API 已关闭（打开右上角 API 开关）\"}");
+                return;
+            }
             if (sharePath && !shareEnabled) {
                 writeResponse(sock, 403, "{\"ok\":false,\"err\":\"互传已关闭（在这台机器的 XFlow 里打开）\"}");
                 return;

@@ -107,9 +107,10 @@ public class MainActivity extends Activity {
         api.setShareEnabled(shareOn);
         paintShareChip(shareChip, shareOn);
         applyShareTab(shareOn);
-        // 互传开着就把 ApiServer 也拉起来：互传走的是 17777 那套接口，
-        // 以前要用户单独点一下「API 开」，不点就从外面连不上（2026-11-21 修的）
-        if (shareOn && !api.isRunning()) api.start(ApiServer.DEFAULT_PORT);
+        // 互传和 API 解耦：服务由「互传」负责拉起，API 开关只决定
+        // 外部能不能调控制接口（/api/jobs、/api/add 这些）。
+        api.setApiEnabled(apiOn);
+        if ((shareOn || apiOn) && !api.isRunning()) api.start(ApiServer.DEFAULT_PORT);
 
         if (shareChip != null) {
             shareChip.setOnClickListener(v -> {
@@ -121,7 +122,7 @@ public class MainActivity extends Activity {
                 if (now) {
                     if (!api.isRunning()) api.start(ApiServer.DEFAULT_PORT);
                     ShareKeepAlive.start(this);
-                } else {
+                } else if (!api.isApiEnabled()) {
                     ShareKeepAlive.stop(this);
                 }
                 Toast.makeText(this, now ? "互传已开启" : "互传已关闭（别人传不进来）",
@@ -176,20 +177,21 @@ public class MainActivity extends Activity {
         // 长按 API：切换开关
         if (apiChip != null) {
             apiChip.setOnLongClickListener(v -> {
-                boolean now = !api.isRunning();
-                if (now) {
+                // 只切「外部能不能调控制接口」，不碰服务本身（互传还要用它）
+                boolean now = !prefs.getBoolean("api_enabled", false);
+                prefs.edit().putBoolean("api_enabled", now).apply();
+                api.setApiEnabled(now);
+                if (now && !api.isRunning()) {
                     api.start(ApiServer.DEFAULT_PORT);
                     if (!api.isRunning()) {
-                        Toast.makeText(this, "API 起不来（端口被占？）", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(this, "服务起不来（端口被占？）", Toast.LENGTH_SHORT).show();
                         paintApiChip(apiChip, false);
                         return true;
                     }
-                } else {
-                    api.stop();
                 }
-                prefs.edit().putBoolean("api_enabled", now).apply();
                 paintApiChip(apiChip, now);
-                Toast.makeText(this, now ? "API 已开" : "API 已关", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, now ? "API 已开：外部能调控制接口了" : "API 已关：只留互传，控制接口一律拒绝",
+                        Toast.LENGTH_SHORT).show();
                 return true;
             });
         }
