@@ -196,13 +196,7 @@ button:active{transform:scale(.97)}
         <span class="grow" style="flex:1"></span>
     <button class="ghost" id="extBtn" title="把浏览器下载交给汐流（装一次就行）" style="flex:0 0 auto;margin-left:auto;font-size:12px;padding:5px 10px">安装浏览器插件</button>
   </div>
-  <div class="dllabel" id="dlLabel">链接</div>
-  <div class="dlcard" id="addRow">
-    <input id="url" placeholder="粘贴链接或 BV 号（直链 / 磁力 / B站 / .torrent）">
-    <div class="dlcard-row">
-      <input id="name" placeholder="文件名（可留空，按链接自动取）">
-      <button class="primary" id="add">开始下载</button>
-    </div>
+
   </div>
   <div class="dlchips" id="dlTools">
     <button class="chipbtn" id="biliBtn" title="扫码登录 B 站，登录后能下 720P/1080P">B站登录</button>
@@ -343,6 +337,21 @@ button:active{transform:scale(.97)}
 </div>
 <div class="pages">
   <div class="page on" id="pageDl">
+    <div class="sec-hd" style="padding:0 16px;margin:14px 0 9px">链接</div>
+    <div class="dlcard" id="addRow" style="margin:0 16px">
+      <input id="url" placeholder="粘贴链接或 BV 号（直链 / 磁力 / B站 / .torrent）">
+      <div class="dlcard-row">
+        <input id="name" placeholder="文件名（可留空，按链接自动取）">
+        <button class="primary" id="add">开始下载</button>
+      </div>
+    </div>
+    <div class="dlchips" id="dlTools" style="padding:0 16px">
+      <button class="chipbtn" id="biliBtn" title="扫码登录 B 站，登录后能下 720P/1080P">B站登录</button>
+      <button class="chipbtn" id="torrentBtn" title="选一个 .torrent 文件加任务">上传种子</button>
+      <button class="chipbtn" id="dir">下载目录</button>
+      <button class="chipbtn" id="clear" title="清掉已完成/失败的历史记录">清空历史</button>
+      <button class="chipbtn" id="settingsBtn" title="对外接口 / API 用法">调用 API</button>
+    </div>
     <div class="list" id="list"><div class="empty"><b>⬇</b>还没有任务</div></div>
   </div>
   <div class="page" id="pageSh"></div>
@@ -427,10 +436,8 @@ function showPage(which){
   // 互传页不需要下载那两行（以前切过去还杵在那儿，白占半屏）
   const addRow = document.getElementById('addRow');
   const dlTools = document.getElementById('dlTools');
-  const dlLabel = document.getElementById('dlLabel');
   if (addRow) addRow.style.display = onSh ? 'none' : '';
   if (dlTools) dlTools.style.display = onSh ? 'none' : '';
-  if (dlLabel) dlLabel.style.display = onSh ? 'none' : '';
   if (onSh) {
     lsPollPeers();
     const holder = document.getElementById('pageSh');
