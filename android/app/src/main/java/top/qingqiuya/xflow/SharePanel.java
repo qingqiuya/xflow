@@ -86,6 +86,13 @@ public class SharePanel {
         sp.edit().putString("peer_names", sb.toString()).apply();
     }
 
+    /** 「自动收」小圆片：绿=开，灰=关 */
+    private void paintAutoChip(TextView chip) {
+        boolean on = sp.getBoolean("auto_accept", true);
+        chip.setText(on ? "自动收" : "手动收");
+        chip.setTextColor(on ? 0xFF3DDC84 : 0xFF8B93A7);
+    }
+
     private String pickedLabel() {
         int n = targets.size();
         if (n == 0) return "选择文件发送…";
@@ -118,6 +125,17 @@ public class SharePanel {
         addrInput = root.findViewById(R.id.addrInput);
 
         root.findViewById(R.id.addrAdd).setOnClickListener(v -> addManual());
+        final TextView autoChip = root.findViewById(R.id.shareAutoChip);
+        if (autoChip != null) {
+            paintAutoChip(autoChip);
+            autoChip.setOnClickListener(v -> {
+                boolean now = !sp.getBoolean("auto_accept", true);
+                sp.edit().putBoolean("auto_accept", now).apply();
+                paintAutoChip(autoChip);
+                say(now ? "自动接收：开（别人发来直接收）" : "自动接收：关（每笔都要你点接收）");
+            });
+        }
+
         android.view.View refresh = root.findViewById(R.id.devRefresh);
         if (refresh != null) {
             refresh.setOnClickListener(v -> {

@@ -68,6 +68,18 @@
                     android:layout_weight="1" />
 
                 <TextView
+                    android:id="@+id/shareAutoChip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="自动收"
+                    android:textColor="#5b6478"
+                    android:textSize="11.5sp"
+                    android:background="@drawable/chip_bg"
+                    android:paddingHorizontal="9dp"
+                    android:paddingVertical="3dp"
+                    android:layout_marginEnd="8dp" />
+
+                <TextView
                     android:id="@+id/devRefresh"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
