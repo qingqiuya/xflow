@@ -587,8 +587,9 @@ func startHTTP(j *Job) {
 						return
 					}
 
-					if probing > 0 {
-						// 上一轮加过线程：看效果
+					if probing > 0 && a > 2 {
+						// 上一轮加过线程：看效果。
+						// 从 1 个连接起头时前几轮基础太小、速度看不准，先无条件加上去。
 						grown := prevDelta > 0 && float64(delta) > float64(prevDelta)*1.05
 						if !grown {
 							stall++
@@ -602,10 +603,14 @@ func startHTTP(j *Job) {
 						stall = 0
 					}
 
-					// 试探性加一批：不低于 2 个，最多加到上限
+					// 试探性加一批：从 1 开始，连接越多一轮加得越多
+					//（1→2→3→4→6→9→13→19→28→32，约 10 轮到顶）
 					add := probing
-					if add < 2 {
-						add = 2
+					if add < 1 {
+						add = 1
+					}
+					if half := atomic.LoadInt32(&active) / 2; half > add {
+						add = half
 					}
 					var spawned int32
 					for i := int32(0); i < add && atomic.LoadInt32(&active) < maxWorkers; i++ {

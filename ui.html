@@ -163,7 +163,7 @@ button:active{transform:scale(.97)}
     <input id="url" placeholder="粘贴链接 / 磁力 / BV 号…">
     <input id="name" placeholder="文件名（可留空）" style="flex:0 0 130px;font-size:12.5px">
     <input id="segs" type="number" min="1" max="32" step="1" value="8" title="下载连接数，1=单线程，最大 32" style="flex:0 0 62px;font-size:12.5px;text-align:center;padding:9px 4px">
-    <label title="勾上：从起始线程数开始自动加连接（至多 32）；取消：就固定这个数" style="flex:0 0 auto;display:flex;align-items:center;gap:4px;font-size:12px;color:var(--dim);user-select:none"><input type="checkbox" id="autogrow" checked>自动增长</label>
+    <label id="growLbl" title="勾上：从 1 个连接开始自动往上加（至多 32），填的数字不生效；取消：就用填的这个数固定" style="flex:0 0 auto;display:flex;align-items:center;gap:4px;font-size:12px;color:var(--dim);user-select:none"><input type="checkbox" id="autogrow" checked>自动增长</label>
     <button class="primary" id="add">开始下载</button>
   </div>
   <div class="dltools" id="dlTools">
@@ -727,7 +727,11 @@ $('#add').onclick=async()=>{
 };
 $('#url').addEventListener('keydown',e=>{if(e.key==='Enter')$('#add').click()});
 {const ns=localStorage.getItem('xflow-segs');if(ns&&$('#segs'))$('#segs').value=ns;
- const ag=localStorage.getItem('xflow-autogrow');if(ag!==null&&$('#autogrow'))$('#autogrow').checked=(ag==='1');}
+ const ag=localStorage.getItem('xflow-autogrow');if(ag!==null&&$('#autogrow'))$('#autogrow').checked=(ag==='1');
+ const syncGrow=()=>{if($('#segs'))$('#segs').disabled=$('#autogrow').checked;
+   if($('#segs'))$('#segs').style.opacity=$('#autogrow').checked?'.45':'1';};
+ syncGrow();
+ $('#autogrow').addEventListener('change',syncGrow);}
 $('#torrentBtn').onclick=()=>$('#torrentFile').click();
 $('#torrentFile').onchange=async e=>{
   const f=e.target.files&&e.target.files[0];

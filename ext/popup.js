@@ -10,6 +10,8 @@ async function load() {
   el("port").value = c.port || 17777;
   el("segs").value = c.segs || 8;
   el("autogrow").checked = c.autogrow !== false;
+  el("segs").disabled = el("autogrow").checked; // 自动增长时从 1 开始，这个数不生效
+  el("segs").style.opacity = el("autogrow").checked ? ".45" : "1";
   el("minMB").value = c.minMB === undefined ? 0.25 : c.minMB;
   renderPause(c);
   test();
@@ -115,7 +117,11 @@ el("segs").addEventListener("change", (e) => {
   const v = parseInt(e.target.value, 10);
   if (!isNaN(v) && v >= 1) save({ segs: Math.min(32, v) });
 });
-el("autogrow").addEventListener("change", (e) => save({ autogrow: e.target.checked }));
+el("autogrow").addEventListener("change", (e) => {
+  save({ autogrow: e.target.checked });
+  el("segs").disabled = e.target.checked;
+  el("segs").style.opacity = e.target.checked ? ".45" : "1";
+});
 
 // 5 分 / 30 分 / 1 小时：同一个按钮再点一次就恢复
 document.querySelectorAll(".pause-btns button[data-min]").forEach((btn) => {
