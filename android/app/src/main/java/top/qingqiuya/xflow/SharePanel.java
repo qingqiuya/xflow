@@ -285,6 +285,7 @@ public class SharePanel {
                 lastDevSig = sig.toString();
                 renderDevices(list);
             }
+            renderIncoming();
             // 收件箱也要跟：不然停在这一页时收到新文件，列表还是「还没有收到的文件」
             long now = System.currentTimeMillis();
             if (now - lastInboxAt > 4000) {
@@ -411,6 +412,77 @@ public class SharePanel {
                 renderInbox(items);
             });
         }).start();
+    }
+
+    /** 别人要发东西过来（自动接收关着）时，出个「接收 / 拒绝」。 */
+    private void renderIncoming() {
+        LinearLayout box = root.findViewById(R.id.incomingBox);
+        if (box == null) return;
+        java.util.List<LocalSendServer.Pending> list = new java.util.ArrayList<>();
+        synchronized (LocalSendServer.PENDING) {
+            list.addAll(LocalSendServer.PENDING);
+        }
+        if (list.isEmpty()) {
+            if (box.getChildCount() > 0) box.removeAllViews();
+            return;
+        }
+        if (box.getChildCount() == list.size()) return;   // 已经在显示了，别重建
+        box.removeAllViews();
+        for (final LocalSendServer.Pending pd : list) {
+            LinearLayout row = new LinearLayout(act);
+            row.setOrientation(LinearLayout.VERTICAL);
+            row.setPadding(dp(14), dp(11), dp(14), dp(11));
+            GradientDrawable bg = new GradientDrawable();
+            bg.setCornerRadius(dp(12));
+            bg.setColor(0xFF1d2c3d);
+            bg.setStroke(dp(1), 0xFF3d7fae);
+            row.setBackground(bg);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            lp.bottomMargin = dp(8);
+            row.setLayoutParams(lp);
+
+            TextView t1 = new TextView(act);
+            t1.setText(pd.from + " 想发 " + pd.count + " 个文件给你");
+            t1.setTextColor(0xFFE8EBF2);
+            t1.setTextSize(13.5f);
+            row.addView(t1);
+
+            TextView t2 = new TextView(act);
+            t2.setText(human(pd.total));
+            t2.setTextColor(0xFF8B93A7);
+            t2.setTextSize(11.5f);
+            row.addView(t2);
+
+            LinearLayout btns = new LinearLayout(act);
+            btns.setGravity(Gravity.END);
+            LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            btns.setLayoutParams(blp);
+
+            TextView no = new TextView(act);
+            no.setText("拒绝");
+            no.setTextColor(0xFF8B93A7);
+            no.setTextSize(13f);
+            no.setPadding(dp(14), dp(8), dp(14), dp(4));
+            no.setOnClickListener(v -> { pd.answer = 2; renderIncoming(); });
+            btns.addView(no);
+
+            TextView yes = new TextView(act);
+            yes.setText("接收");
+            yes.setTextColor(0xFF04121C);
+            yes.setTextSize(13f);
+            yes.setTypeface(null, android.graphics.Typeface.BOLD);
+            yes.setPadding(dp(20), dp(8), dp(20), dp(4));
+            GradientDrawable ybg = new GradientDrawable();
+            ybg.setColor(0xFF6FD3FF);
+            ybg.setCornerRadius(dp(9));
+            yes.setBackground(ybg);
+            yes.setOnClickListener(v -> { pd.answer = 1; renderIncoming(); });
+            btns.addView(yes);
+            row.addView(btns);
+            box.addView(row);
+        }
     }
 
     private void renderInbox(List<String[]> items) {

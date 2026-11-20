@@ -39,6 +39,13 @@
                     android:paddingTop="4dp" />
             </LinearLayout>
 
+            <!-- 别人要发文件过来、等你点接受时的确认条 -->
+            <LinearLayout
+                android:id="@+id/incomingBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+
             <!-- 设备：标题 + 刷新（重新扫描一遍） -->
             <LinearLayout
                 android:layout_width="match_parent"

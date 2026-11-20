@@ -69,6 +69,18 @@ public class LocalSendServer {
 
     public static final java.util.List<LsPeer> PEERS = new java.util.ArrayList<>();
 
+    /** 等用户点「接收 / 拒绝」的传输请求（自动接收关着时用）。 */
+    public static class Pending {
+        public String id = "";
+        public String from = "";
+        public int count = 0;
+        public long total = 0;
+        public volatile int answer = 0;   // 0=等 1=收 2=拒
+        public long createdAt = System.currentTimeMillis();
+    }
+
+    public static final java.util.List<Pending> PENDING = new java.util.ArrayList<>();
+
     private static void rememberPeer(String name, String ip, int port) {
         synchronized (PEERS) {
             long now = System.currentTimeMillis();
@@ -315,10 +327,6 @@ public class LocalSendServer {
                 return;
             }
             if (path.equals(base + "/prepare-upload")) {
-                if (!autoAccept()) {
-                    write(sock, 403, "{\"err\":\"接收方没开自动接收\"}");
-                    return;
-                }
                 String body = readBody(raw, len);
                 JSONObject o = new JSONObject(body);
                 JSONObject files = o.optJSONObject("files");
@@ -329,6 +337,29 @@ public class LocalSendServer {
                 Session se = new Session();
                 JSONObject info = o.optJSONObject("info");
                 if (info != null) se.from = info.optString("alias", "");
+
+                // 没开自动接收：挂在这儿等用户点「接收」，最多等 30 秒
+                if (!autoAccept()) {
+                    Pending pd = new Pending();
+                    pd.from = se.from.isEmpty() ? "对方设备" : se.from;
+                    pd.count = files.length();
+                    long tot = 0;
+                    for (java.util.Iterator<String> it = files.keys(); it.hasNext(); ) {
+                        JSONObject f = files.optJSONObject(it.next());
+                        if (f != null) tot += f.optLong("size", 0);
+                    }
+                    pd.total = tot;
+                    synchronized (PENDING) { PENDING.add(pd); }
+                    long deadline = System.currentTimeMillis() + 30000;
+                    while (System.currentTimeMillis() < deadline && pd.answer == 0) {
+                        Thread.sleep(150);
+                    }
+                    synchronized (PENDING) { PENDING.remove(pd); }
+                    if (pd.answer != 1) {
+                        write(sock, 403, "{\"err\":\"对方没有接受\"}");
+                        return;
+                    }
+                }
                 synchronized (sessions) {
                     // 清掉十分钟前的
                     long now = System.currentTimeMillis();

@@ -176,6 +176,13 @@ public class ApiServer {
                 }
             }
 
+            // 浏览器的跨域预检：带自定义头（X-File-Name 之类）时会先来一发 OPTIONS，
+            // 不回它的话桌面端 xhr 直接 onerror，界面只显示「网络断了」。
+            if ("OPTIONS".equalsIgnoreCase(method)) {
+                writeResponse(sock, 200, "{}");
+                return;
+            }
+
             // 令牌校验：header 或 ?token= 都行（浏览器直接打开方便）
             // 例外：互传/剪贴板这几个接口在同一局域网内自己设备之间用，不折腾人抄令牌
             // （收文件那头有「自动接收」开关把关）
@@ -335,6 +342,9 @@ public class ApiServer {
                 "Content-Type: application/json; charset=utf-8\r\n" +
                 "Content-Length: " + b.length + "\r\n" +
                 "Access-Control-Allow-Origin: *\r\n" +
+                "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n" +
+                "Access-Control-Allow-Headers: Content-Type, X-API-Token, X-File-Name, X-File-Path, X-Enc\r\n" +
+                "Access-Control-Max-Age: 86400\r\n" +
                 "Connection: close\r\n\r\n").getBytes(StandardCharsets.UTF_8));
         os.write(b);
         os.flush();
