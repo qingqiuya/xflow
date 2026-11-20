@@ -90,12 +90,7 @@
                     android:textColor="#7fd4ff" />
             </LinearLayout>
 
-            <LinearLayout
-                android:id="@+id/inboxBox"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:paddingTop="14dp" />
+
 
             <!-- 剪贴板 -->
             <TextView
@@ -155,5 +150,22 @@
                 android:textAllCaps="false"
                 android:background="@drawable/primary"
                 android:textColor="#031018" />
+
+            <!-- 历史（收到的 / 发出去的）：放在发送按钮下面，卡片一行一个 -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="📥 传输历史"
+                android:textColor="#8b93a7"
+                android:textSize="12sp"
+                android:paddingTop="22dp"
+                android:paddingBottom="8dp" />
+
+            <LinearLayout
+                android:id="@+id/inboxBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingTop="14dp" />
         </LinearLayout>
 </LinearLayout>
