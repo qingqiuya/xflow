@@ -50,7 +50,23 @@ public class SharePanel {
 
     private final Handler ui = new Handler(Looper.getMainLooper());
     private SharedPreferences sp;
-    private Beacon.Peer target;
+    // 多选：一列设备可以勾多台，一次发给所有勾中的（key = ip:port）
+    private final java.util.LinkedHashMap<String, Beacon.Peer> targets = new java.util.LinkedHashMap<>();
+
+    private static String keyOf(Beacon.Peer p) {
+        return p.ip + ":" + p.port;
+    }
+
+    private java.util.List<Beacon.Peer> picked() {
+        return new java.util.ArrayList<>(targets.values());
+    }
+
+    private String pickedLabel() {
+        int n = targets.size();
+        if (n == 0) return "选择文件发送…";
+        if (n == 1) return "发送到 " + targets.values().iterator().next().name;
+        return "发送到 " + n + " 台设备";
+    }
     private final List<Beacon.Peer> manual = new ArrayList<>();
 
     private LinearLayout devicesBox, inboxBox;
@@ -233,7 +249,7 @@ public class SharePanel {
             return;
         }
         for (Beacon.Peer p : list) {
-            boolean on = target != null && target.ip.equals(p.ip) && target.port == p.port;
+            boolean on = targets.containsKey(keyOf(p));
             LinearLayout row = new LinearLayout(act);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER_VERTICAL);
@@ -270,25 +286,21 @@ public class SharePanel {
             row.addView(tag);
 
             row.setOnClickListener(v -> {
+                // 多选：点一下勾上，再点取消；可以勾好几台一次发
                 if (on) {
-                    // 再点一次取消：之前选中后没法取消，只能选别的
-                    target = null;
-                    targetText.setText("还没选设备 —— 下面点一个");
-                    paintPick();
-                    say("");
+                    targets.remove(keyOf(p));
                 } else {
-                    target = p;
-                    targetText.setText(p.name + "\n" + p.ip);
-                    paintPick();
-                    say("");
+                    targets.put(keyOf(p), p);
                 }
+                paintPick();
+                say(targets.isEmpty() ? "" : ("已选 " + targets.size() + " 台"));
                 renderDevices(list);
             });
             row.setOnLongClickListener(v -> {
                 if ("manual".equals(p.platform)) {
                     manual.remove(p);
                     saveManual();
-                    if (target == p) target = null;
+                    targets.remove(keyOf(p));
                     refreshDevices();
                     say("已移除手动设备");
                 }
@@ -390,13 +402,15 @@ public class SharePanel {
             send.setTextSize(12.5f);
             send.setPadding(dp(10), dp(6), dp(4), dp(6));
             send.setOnClickListener(v -> {
-                if (target == null) {
-                    say("先在上面选一台设备");
+                if (targets.isEmpty()) {
+                    say("先在上面选设备");
                     return;
                 }
-                final Beacon.Peer t = target;
+                final java.util.List<Beacon.Peer> ts = picked();
                 final Uri u = Uri.parse(uri);
-                new Thread(() -> uploadFromUri(u, it[0], querySizeOf(u), t)).start();
+                for (final Beacon.Peer t : ts) {
+                    new Thread(() -> uploadFromUri(u, it[0], querySizeOf(u), t)).start();
+                }
             });
             row.addView(send);
 
@@ -425,12 +439,12 @@ public class SharePanel {
     /** 底部按钮直接写明发给谁，省掉上面那块重复的「发送到」 */
     private void paintPick() {
         if (pickBtn == null) return;
-        pickBtn.setText(target == null ? "选择文件发送…" : ("发送到 " + target.name));
+        pickBtn.setText(pickedLabel());
     }
 
     private void pickFile() {
-        if (target == null) {
-            say("先在上面选一台设备");
+        if (targets.isEmpty()) {
+            say("先在上面选设备");
             return;
         }
         Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
@@ -444,9 +458,11 @@ public class SharePanel {
         final Uri uri = data.getData();
         final String name = queryName(uri);
         final long size = querySize(uri);
-        final Beacon.Peer t = target;
-        say("上传中：" + name);
-        new Thread(() -> uploadFromUri(uri, name, size, t)).start();
+        final java.util.List<Beacon.Peer> ts = picked();
+        say("上传中：" + name + (ts.size() > 1 ? ("（发往 " + ts.size() + " 台）") : ""));
+        for (final Beacon.Peer t : ts) {
+            new Thread(() -> uploadFromUri(uri, name, size, t)).start();
+        }
     }
 
     /** 把 content:// 或 file:// 的流直接推到目标设备（选文件/收件箱转手都用它）。 */
@@ -492,8 +508,8 @@ public class SharePanel {
     }
 
     private void sendMyClipboard() {
-        if (target == null) {
-            say("先选一台设备");
+        if (targets.isEmpty()) {
+            say("先选设备");
             return;
         }
         String t = "";
@@ -511,12 +527,11 @@ public class SharePanel {
     }
 
     private void postClipboard(String text, boolean clearInput) {
-        if (target == null) {
-            say("先选一台设备");
+        if (targets.isEmpty()) {
+            say("先选设备");
             return;
         }
-        final Beacon.Peer t = target;
-        new Thread(() -> {
+        for (final Beacon.Peer t : picked()) new Thread(() -> {
             try {
                 String url = "http://" + hostOf(t) + ":" + t.port + "/api/clipboard";
                 String body = "{\"text\":\"" + jsonEsc(text) + "\"}";
@@ -532,11 +547,12 @@ public class SharePanel {
     }
 
     private void getPeerClipboard() {
-        if (target == null) {
-            say("先选一台设备");
+        if (targets.isEmpty()) {
+            say("先选设备");
             return;
         }
-        final Beacon.Peer t = target;
+        // 取剪贴板只能取一台的，多选时取第一台
+        final Beacon.Peer t = targets.values().iterator().next();
         new Thread(() -> {
             try {
                 String url = "http://" + hostOf(t) + ":" + t.port + "/api/clipboard";
