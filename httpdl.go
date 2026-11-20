@@ -375,10 +375,14 @@ func startHTTP(j *Job) {
 	// 文件切成 1MB 的块丢队列，worker 从队列抢；worker 数按实测速度动态增加
 	const chunkSize = int64(1 << 20)
 	const maxWorkers = 32
-	// 起始并发取界面上选的段数（以前这里写死 4，选 16 也不生效）
+	// 起始并发：手动模式取界面上填的数；自动增长模式从 1 个连接开始慢慢加
+	//（2026-11-20 清秋要求「线程从 1 开始增加」）。
 	startWorkers := j.SegN
 	if startWorkers <= 0 {
 		startWorkers = 8
+	}
+	if !j.NoGrow {
+		startWorkers = 1
 	}
 	if startWorkers > maxWorkers {
 		startWorkers = maxWorkers
