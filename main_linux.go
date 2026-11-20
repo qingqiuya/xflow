@@ -203,6 +203,7 @@ func main() {
 	// ★ 2026-11-11：Linux 版原来只有 /api/jobs，插件一调就 404「汐流没接住」
 	registerBiliLogin(mux)
 	registerInstallExt(mux)
+	go startLocalSend()
 
 	mux.HandleFunc("/api/add", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
