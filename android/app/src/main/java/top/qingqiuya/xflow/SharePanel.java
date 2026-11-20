@@ -131,6 +131,23 @@ public class SharePanel {
             });
         }
 
+        android.view.View clearHist = root.findViewById(R.id.historyClear);
+        if (clearHist != null) {
+            clearHist.setOnClickListener(v -> DarkDialog.confirm(act, "清空传输历史",
+                    "会把「下载/XFlow」里的文件全部删掉，删了找不回来。", "全部删除", () ->
+                            new Thread(() -> {
+                                int ok = 0, bad = 0;
+                                for (Transfer.Item it : Transfer.list(act)) {
+                                    if (Transfer.delete(act, it.uri)) ok++; else bad++;
+                                }
+                                final int fok = ok, fbad = bad;
+                                ui.post(() -> {
+                                    say(fbad > 0 ? ("删掉 " + fok + " 个，" + fbad + " 个没删掉") : ("已清空 " + fok + " 个文件"));
+                                    loadInbox();
+                                });
+                            }).start()));
+        }
+
         final android.widget.Button pickBtn = root.findViewById(R.id.pickFile);
         pickBtn.setOnClickListener(v -> pickFile());
         this.pickBtn = pickBtn;

@@ -174,15 +174,38 @@
                 android:textColor="#031018" />
 
             <!-- 历史（收到的 / 发出去的）：放在发送按钮下面，卡片一行一个 -->
-            <TextView
-                android:id="@+id/historyTitle"
-                android:layout_width="wrap_content"
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="📥 传输历史"
-                android:textColor="#8b93a7"
-                android:textSize="12sp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
                 android:paddingTop="22dp"
-                android:paddingBottom="8dp" />
+                android:paddingBottom="8dp">
+
+                <TextView
+                    android:id="@+id/historyTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="📥 传输历史"
+                    android:textColor="#8b93a7"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1" />
+
+                <TextView
+                    android:id="@+id/historyClear"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="清空"
+                    android:textColor="#8b93a7"
+                    android:textSize="11.5sp"
+                    android:background="@drawable/chip_bg"
+                    android:paddingHorizontal="10dp"
+                    android:paddingVertical="3dp" />
+            </LinearLayout>
 
             <LinearLayout
                 android:id="@+id/inboxBox"
