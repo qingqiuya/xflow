@@ -455,12 +455,28 @@ public class DownloadService extends Service {
             } else {
                 // 有些站点对 Range 请求直接回 200 + 一小段 JSON 错误体，
                 // 光看状态码会把它当成文件下下来还显示「完成」。
+                // 但别一刀切：用户真要下 .json 文件时不能拦。所以看两件事：
+                //   ① URL 明显是 .json 的就放行
+                //   ② 否则读前 512 字节，只有出现错误字段才判失败
                 String ct = c.getContentType() == null ? "" : c.getContentType().toLowerCase();
                 long len = c.getContentLengthLong();
-                if (ct.contains("application/json") && len >= 0 && len < 8192) {
-                    j.state = "error";
-                    j.err = "对方返回的是错误信息（JSON " + len + " 字节），不是文件";
-                    return;
+                if (ct.contains("application/json") && len >= 0 && len < 8192
+                        && !j.url.toLowerCase().contains(".json")) {
+                    String head = "";
+                    try {
+                        java.io.InputStream b = c.getInputStream();
+                        byte[] hb = new byte[512];
+                        int hn = b.read(hb);
+                        if (hn > 0) head = new String(hb, 0, hn, "UTF-8").toLowerCase();
+                        b.close();
+                    } catch (Exception ignored) {
+                    }
+                    if (head.contains("\"detail\"") || head.contains("\"error\"")
+                            || head.contains("\"message\"") || head.contains("access denied")) {
+                        j.state = "error";
+                        j.err = "对方返回的是错误信息（不是文件）";
+                        return;
+                    }
                 }
                 ranges = c.getHeaderField("Accept-Ranges") != null
                         && "bytes".equalsIgnoreCase(c.getHeaderField("Accept-Ranges"));
