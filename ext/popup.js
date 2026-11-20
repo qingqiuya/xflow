@@ -1,5 +1,5 @@
 // popup 逻辑：只管开关和端口，重活都在 background.js
-const DEFAULTS = { enabled: true, port: 17777, notify: true, segs: 16, mode: "auto", minMB: 0.25, pauseUntil: 0 };
+const DEFAULTS = { enabled: true, port: 17777, notify: true, segs: 8, autogrow: true, minMB: 0.25, pauseUntil: 0 };
 
 const el = (id) => document.getElementById(id);
 
@@ -8,7 +8,8 @@ async function load() {
   el("enabled").checked = c.enabled !== false;
   el("notify").checked = c.notify !== false;
   el("port").value = c.port || 17777;
-  el("mode").value = c.mode || (c.segs ? String(c.segs) : "auto");
+  el("segs").value = c.segs || 8;
+  el("autogrow").checked = c.autogrow !== false;
   el("minMB").value = c.minMB === undefined ? 0.25 : c.minMB;
   renderPause(c);
   test();
@@ -109,8 +110,12 @@ el("minMB").addEventListener("change", (e) => {
   if (!isNaN(v) && v >= 0) save({ minMB: v });
 });
 
-// 下载线程：auto=8 起自适应增长；1=单线程；N=固定 N 不增长
-el("mode").addEventListener("change", (e) => save({ mode: e.target.value }));
+// 下载线程：手动填 1–32；勾「自动增长」就从该数开始加到 32，取消则固定
+el("segs").addEventListener("change", (e) => {
+  const v = parseInt(e.target.value, 10);
+  if (!isNaN(v) && v >= 1) save({ segs: Math.min(32, v) });
+});
+el("autogrow").addEventListener("change", (e) => save({ autogrow: e.target.checked }));
 
 // 5 分 / 30 分 / 1 小时：同一个按钮再点一次就恢复
 document.querySelectorAll(".pause-btns button[data-min]").forEach((btn) => {

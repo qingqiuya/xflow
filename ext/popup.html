@@ -160,15 +160,12 @@
         <input type="number" id="port" min="1" max="65535">
       </div>
       <div class="row">
-        <label for="mode">下载线程</label>
-        <select id="mode">
-          <option value="auto">自动增长</option>
-          <option value="1">单线程</option>
-          <option value="4">4 线程</option>
-          <option value="8">8 线程</option>
-          <option value="16">16 线程</option>
-          <option value="32">32 线程</option>
-        </select>
+        <label for="segs">下载线程</label>
+        <input type="number" id="segs" min="1" max="32" step="1">
+      </div>
+      <div class="row">
+        <label for="autogrow">自动增长连接</label>
+        <span class="sw"><input type="checkbox" id="autogrow"><span class="slider"></span></span>
       </div>
       <div class="row">
         <label for="minMB">小于此值不接管（MB）</label>

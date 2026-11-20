@@ -162,14 +162,8 @@ button:active{transform:scale(.97)}
   <div class="addrow">
     <input id="url" placeholder="粘贴链接 / 磁力 / BV 号…">
     <input id="name" placeholder="文件名（可留空）" style="flex:0 0 130px;font-size:12.5px">
-    <select id="seg" title="连接数：自动增长 / 固定 N / 单线程" style="flex:0 0 104px;font-size:12.5px;padding:9px 6px">
-      <option value="auto">自动线程</option>
-      <option value="1">单线程</option>
-      <option value="4">4 线程</option>
-      <option value="8">8 线程</option>
-      <option value="16">16 线程</option>
-      <option value="32">32 线程</option>
-    </select>
+    <input id="segs" type="number" min="1" max="32" step="1" value="8" title="下载连接数，1=单线程，最大 32" style="flex:0 0 62px;font-size:12.5px;text-align:center;padding:9px 4px">
+    <label title="勾上：从起始线程数开始自动加连接（至多 32）；取消：就固定这个数" style="flex:0 0 auto;display:flex;align-items:center;gap:4px;font-size:12px;color:var(--dim);user-select:none"><input type="checkbox" id="autogrow" checked>自动增长</label>
     <button class="primary" id="add">开始下载</button>
   </div>
   <div class="dltools" id="dlTools">
@@ -722,19 +716,18 @@ $('#add').onclick=async()=>{
   const src=$('#url').value.trim();
   if(!src){$('#url').focus();return}
   $('#add').disabled=true;
-  // 线程模式：auto=8 起自适应增长；1=单线程（直读整个响应）；N=固定 N 不增长
-  const sel=$('#seg').value;
-  let segs=8,nogrow=false;
-  if(sel==='auto'){segs=8;nogrow=false}
-  else if(sel==='1'){segs=1;nogrow=true}
-  else {segs=Number(sel);nogrow=true}
-  localStorage.setItem('xflow-seg',sel);
+  // 连接数：手动填 1–32；勾「自动增长」就从该数开始自适应加到 32，取消则固定不增
+  const n = Math.max(1, Math.min(32, parseInt($('#segs').value, 10) || 8));
+  const nogrow = !$('#autogrow').checked;
+  localStorage.setItem('xflow-segs', String(n));
+  localStorage.setItem('xflow-autogrow', nogrow ? '0' : '1');
   await fetch('/api/jobs',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({source:src,name:$('#name').value.trim(),segs,nogrow})});
+    body:JSON.stringify({source:src,name:$('#name').value.trim(),segs:n,nogrow})});
   $('#url').value='';$('#name').value='';$('#add').disabled=false;load();
 };
 $('#url').addEventListener('keydown',e=>{if(e.key==='Enter')$('#add').click()});
-{const s=localStorage.getItem('xflow-seg');if(s&&$('#seg'))$('#seg').value=s;}
+{const ns=localStorage.getItem('xflow-segs');if(ns&&$('#segs'))$('#segs').value=ns;
+ const ag=localStorage.getItem('xflow-autogrow');if(ag!==null&&$('#autogrow'))$('#autogrow').checked=(ag==='1');}
 $('#torrentBtn').onclick=()=>$('#torrentFile').click();
 $('#torrentFile').onchange=async e=>{
   const f=e.target.files&&e.target.files[0];

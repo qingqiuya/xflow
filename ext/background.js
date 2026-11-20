@@ -12,8 +12,8 @@ const DEFAULTS = {
   enabled: true,
   port: 17777,
   notify: true,
-  segs: 16,
-  mode: "auto", // auto=自动增长；1=单线程；N=固定 N 不增长
+  segs: 8, // 起始连接数（1=单线程）
+  autogrow: true, // 是否从起始数开始自动加到 32
   minMB: 0.25, // 小于这个尺寸不接管，交回浏览器（256KB 以下建任务的开销大于下载）
   singleUnder: 1, // 小于这个尺寸（MB）不论模式都走单连接
   pauseUntil: 0, // 暂停接管：0=没暂停；>0=到那个时间点；-1=一直暂停到手动恢复
@@ -107,17 +107,8 @@ function launchApp(url, name) {
 // 推任务给 XFlow；失败抛错，调用方据此决定是否取消浏览器下载
 // 线程模式：auto → 8 起自适应增长；1 → 单线程（直读整个响应）；N → 固定 N 不增长
 async function push(url, name, referer, cookie, dir, size) {
-  const mode = String(C.mode || "auto");
-  let segs = 8;
-  let nogrow = false;
-  if (mode === "auto") {
-    segs = 8;
-    nogrow = false;
-  } else {
-    const n = parseInt(mode, 10);
-    segs = n > 0 ? n : 8;
-    nogrow = true;
-  }
+  let segs = Math.max(1, Math.min(32, parseInt(C.segs, 10) || 8));
+  let nogrow = C.autogrow === false;
   // 小文件不值得分段：建连接的开销比下载本身还大
   if (size > 0 && size < C.singleUnder * 1024 * 1024) {
     segs = 1;
