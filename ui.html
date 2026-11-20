@@ -56,6 +56,11 @@ button:active{transform:scale(.97)}
 .segs *{flex:1;background:#0a0d12;border-radius:2px;overflow:hidden;position:relative;min-width:0}
 .segs *>b{display:block;height:100%;background:linear-gradient(90deg,#2f8fff,#5cc9ff);width:0;transition:width .35s ease}
 .segs.done *>b{background:linear-gradient(90deg,#2fae6a,#3ddc84)}
+.thr{display:flex;align-items:center;gap:9px;margin-top:7px;padding:7px 10px;background:#0a0d12;border:1px solid var(--line);border-radius:8px}
+.thr input[type=range]{flex:1;min-width:0;accent-color:#2f8fff;height:4px}
+.thr .thrNum{min-width:20px;text-align:right;font-size:12.5px;color:var(--fg)}
+.thr .autolbl{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--dim);white-space:nowrap;cursor:pointer}
+.thr .thrNow{font-size:11px;color:var(--dim);white-space:nowrap}
 .acts{display:flex;gap:7px;margin-top:10px}
 .empty{text-align:center;color:var(--dim);padding:60px 20px;font-size:13px}
 .empty b{display:block;font-size:30px;margin-bottom:10px;opacity:.35}
@@ -678,7 +683,11 @@ async function shPollPending(){
   }catch(e){}
 }
 setInterval(shPollPending, 2000);
+// 哪些任务的线程面板是展开的（load 每秒重渲染，状态得放外面）
+const openThr = new Set();
+let thrDragging = false;
 async function load(){
+  if (thrDragging) return; // 正在拖滑块，别打断
   const d=await (await fetch('/api/jobs')).json();
   const js=d.jobs||[];
   const st=js.filter(j=>j.state==='downloading').length;
@@ -698,14 +707,22 @@ async function load(){
         ${j.state==='downloading'?`<button class="mini" data-id="${j.id}" data-act="pause">暂停</button>`:''}
         ${(j.state === 'paused' || j.state === 'queued' || j.state === 'error') ? `<button class="mini" data-id="${j.id}" data-act="resume">继续</button>` : ''}
         ${(j.state === 'done' || j.state === 'error') ? `<button class="mini" data-id="${j.id}" data-act="redownload">从头下载</button>` : ''}
+        ${j.kind==='http'?`<button class="mini" data-id="${j.id}" data-act="threads">线程</button>`:''}
         <button class="mini" data-id="${j.id}" data-act="open">打开位置</button>
         <button class="danger" data-id="${j.id}" data-act="remove">删除</button>
-      </div></div>`;
+      </div>
+      ${(j.kind==='http'&&openThr.has(j.id))?`<div class="thr" data-id="${j.id}">
+        <label class="autolbl"><input type="checkbox" class="thrAuto" ${j.no_grow?'':'checked'}>自动线程</label>
+        <input type="range" class="thrRange" min="1" max="32" step="1" value="${j.seg_n||8}">
+        <span class="thrNum">${j.seg_n||8}</span>
+        <span class="thrNow">${j.workers||0} 连接</span>
+      </div>`:''}</div>`;
   }).join('');
 }
 $('#list').addEventListener('click',async e=>{
   const b=e.target.closest('button[data-act]');if(!b)return;
   const {id,act}=b.dataset;
+  if(act==='threads'){openThr.has(id)?openThr.delete(id):openThr.add(id);load();return}
   if(act==='remove') await fetch('/api/job/'+id,{method:'DELETE'});
   else if(act==='open') await fetch('/api/open?id='+id);
   else if(act==='redownload') await fetch('/api/redownload?id='+id);
@@ -725,6 +742,25 @@ $('#add').onclick=async()=>{
     body:JSON.stringify({source:src,name:$('#name').value.trim(),segs:n,nogrow})});
   $('#url').value='';$('#name').value='';$('#add').disabled=false;load();
 };
+// 线程面板：拖滑块 / 拨开关 → 立刻把这个任务的并发改掉（不用重开任务）
+$('#list').addEventListener('input',e=>{
+  const row=e.target.closest('.thr');if(!row)return;
+  if(e.target.classList.contains('thrRange')){
+    row.querySelector('.thrNum').textContent=e.target.value;
+    thrDragging=true;
+  }
+});
+$('#list').addEventListener('change',async e=>{
+  const row=e.target.closest('.thr');if(!row)return;
+  const id=row.dataset.id;
+  const auto=row.querySelector('.thrAuto').checked;
+  const n=Number(row.querySelector('.thrRange').value)||8;
+  thrDragging=false;
+  await fetch(`/api/job/${id}/threads?segs=${n}&nogrow=${auto?0:1}`,{method:'POST'});
+  load();
+});
+document.addEventListener('pointerup',()=>{setTimeout(()=>{thrDragging=false},400)});
+
 $('#url').addEventListener('keydown',e=>{if(e.key==='Enter')$('#add').click()});
 {const ns=localStorage.getItem('xflow-segs');if(ns&&$('#segs'))$('#segs').value=ns;
  const ag=localStorage.getItem('xflow-autogrow');if(ag!==null&&$('#autogrow'))$('#autogrow').checked=(ag==='1');

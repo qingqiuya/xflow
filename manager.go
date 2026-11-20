@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -41,6 +42,11 @@ type Job struct {
 	mu     sync.Mutex
 	lastD  int64
 	lastT  time.Time
+
+	// desired 是运行中可调的目标并发数（界面上拖滑块就改它），
+	// growGen 每次切「自动/手动」加一，自适应循环看到它变了就重置慢启动状态。
+	desired int32
+	growGen int32
 
 	// abortErr 非空表示不是因为用户取消才停的（比如某段反复拿不到数据）。
 	// 主循环见到它就报 error 而不是 paused。
@@ -194,6 +200,39 @@ func (m *Manager) Get(id string) *Job {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.jobs[id]
+}
+
+// SetThreads 在下载过程中调线程数：segs 1..32，noGrow=false 表示自动增长
+// （此时 segs 是上限，从 1 个连接慢启动往上探）。
+func (m *Manager) SetThreads(id string, segs int, noGrow bool) error {
+	j := m.Get(id)
+	if j == nil {
+		return fmt.Errorf("没有这个任务")
+	}
+	if segs < 1 {
+		segs = 1
+	}
+	if segs > 32 {
+		segs = 32
+	}
+	j.mu.Lock()
+	wasNoGrow := j.NoGrow
+	j.SegN = segs
+	j.NoGrow = noGrow
+	j.mu.Unlock()
+
+	if noGrow {
+		atomic.StoreInt32(&j.desired, int32(segs))
+	} else if wasNoGrow {
+		// 从手动切回自动：重新从 1 个连接慢启动
+		atomic.StoreInt32(&j.desired, 1)
+		atomic.AddInt32(&j.growGen, 1)
+	} else if d := atomic.LoadInt32(&j.desired); d > int32(segs) {
+		// 自动模式下调低上限：多余的连接会在下一块下载完后退场
+		atomic.StoreInt32(&j.desired, int32(segs))
+	}
+	m.save()
+	return nil
 }
 
 func (m *Manager) Control(id, act string) error {

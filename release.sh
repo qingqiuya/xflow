@@ -36,5 +36,5 @@ gh release create "v$VER" --title "$NOTES" --notes "$NOTES" \
 
 echo "== 5/5 镜像到 NAS"
 ~/bin/mirror-xflow-releases.sh "v$VER"
-ssh qingqiu@10.11.11.13 "echo v$VER > /mnt/nas/releases/xflow/LATEST && ln -sfn v$VER /mnt/nas/releases/xflow/latest"
+ssh qingqiu@10.11.11.20 "echo v$VER > /mnt/raid6/nas/releases/xflow/LATEST && ln -sfn v$VER /mnt/raid6/nas/releases/xflow/latest"
 echo "完成：v$VER"

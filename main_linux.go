@@ -282,6 +282,18 @@ func main() {
 			return
 		}
 		if len(parts) > 1 {
+			if parts[1] == "threads" {
+				q := r.URL.Query()
+				segs, _ := strconv.Atoi(q.Get("segs"))
+				ng := q.Get("nogrow")
+				noGrow := ng == "1" || ng == "true"
+				if err := mgr.SetThreads(id, segs, noGrow); err != nil {
+					json.NewEncoder(w).Encode(map[string]any{"ok": false, "err": err.Error()})
+					return
+				}
+				json.NewEncoder(w).Encode(map[string]any{"ok": true})
+				return
+			}
 			if err := mgr.Control(id, parts[1]); err != nil {
 				json.NewEncoder(w).Encode(map[string]any{"ok": false, "err": err.Error()})
 				return

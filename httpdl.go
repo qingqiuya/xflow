@@ -467,11 +467,27 @@ func startHTTP(j *Job) {
 	j.mu.Unlock()
 
 	var (
-		wg     sync.WaitGroup
-		total  int64
-		active int32
-		idSeq  int32
+		wg      sync.WaitGroup
+		total   int64
+		active  int32
+		idSeq   int32
+		desired int32
 	)
+
+	// ceiling 是当前任务允许的最大并发（界面上填的数，1..32），运行时可改。
+	ceiling := func() int32 {
+		j.mu.Lock()
+		n := j.SegN
+		j.mu.Unlock()
+		if n < 1 {
+			n = 1
+		}
+		if n > maxWorkers {
+			n = maxWorkers
+		}
+		return int32(n)
+	}
+	atomic.StoreInt32(&desired, int32(startWorkers))
 
 	atomic.StoreInt64(&total, doneBytes)
 	// 每 5 秒把已完成块落盘，断流/断电都不至于白下
@@ -489,9 +505,15 @@ func startHTTP(j *Job) {
 		}
 	}()
 
+	// worker：从块队列里抢 1MB 的块下。线程数被调低时，多余的 worker
+	// 在拿下一块之前自己退场（CAS 减 active，只减到 desired 为止）。
 	runWorker := func() {
+		decremented := false
 		defer wg.Done()
 		defer func() {
+			if !decremented {
+				atomic.AddInt32(&active, -1)
+			}
 			j.mu.Lock()
 			j.Workers--
 			j.mu.Unlock()
@@ -500,7 +522,23 @@ func startHTTP(j *Job) {
 		if idx >= maxWorkers {
 			idx = maxWorkers - 1
 		}
-		for rng := range ch {
+		for {
+			for {
+				d := atomic.LoadInt32(&desired)
+				a := atomic.LoadInt32(&active)
+				if a <= d {
+					break
+				}
+				if atomic.CompareAndSwapInt32(&active, a, a-1) {
+					decremented = true
+					return
+				}
+			}
+
+			rng, ok := <-ch
+			if !ok {
+				return
+			}
 			if ctx.Err() != nil {
 				return
 			}
@@ -539,14 +577,121 @@ func startHTTP(j *Job) {
 		}
 	}
 
-	spawn := func() {
-		wg.Add(1)
-		atomic.AddInt32(&active, 1)
-		j.mu.Lock()
-		j.Workers++
-		j.mu.Unlock()
-		go runWorker()
+	// trySpawn：把 active 抬到 desired（CAS 保证不会超开）
+	trySpawn := func() bool {
+		for {
+			d := atomic.LoadInt32(&desired)
+			a := atomic.LoadInt32(&active)
+			if a >= d || a >= maxWorkers {
+				return false
+			}
+			if atomic.CompareAndSwapInt32(&active, a, a+1) {
+				wg.Add(1)
+				j.mu.Lock()
+				j.Workers++
+				j.mu.Unlock()
+				go runWorker()
+				return true
+			}
+		}
 	}
+
+	// 调谐：desired 一变，250ms 内把连接数补上去（手动调高也靠这个立即生效）
+	go func() {
+		t := time.NewTicker(250 * time.Millisecond)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				for trySpawn() {
+				}
+			}
+		}
+	}()
+
+	// 自适应（类似 TCP 慢启动）：从 1 个连接起，每 3 秒看总速度涨没涨，
+	// 涨了就继续加（连接越多一轮加得越多），连着两轮没涨就认定吃满了、停手。
+	// 界面把「自动」关掉（NoGrow）时这里只做旁观，desired 完全由用户滑块决定。
+	go func() {
+		t := time.NewTicker(3 * time.Second)
+		defer t.Stop()
+		var prev, prevDelta int64
+		var probing int32
+		stall := 0
+		gen := atomic.LoadInt32(&j.growGen)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				cur := atomic.LoadInt64(&total)
+				delta := cur - prev
+				prev = cur
+				if cur >= size {
+					return
+				}
+				// 切过「自动/手动」就重置慢启动状态
+				if g := atomic.LoadInt32(&j.growGen); g != gen {
+					gen = g
+					prevDelta = 0
+					probing = 0
+					stall = 0
+					continue
+				}
+				j.mu.Lock()
+				nogrow := j.NoGrow
+				j.mu.Unlock()
+				if nogrow {
+					// 手动固定：不加连接，等调谐循环按滑块收紧
+					probing = 0
+					stall = 0
+					prevDelta = delta
+					continue
+				}
+				limit := ceiling()
+				if atomic.LoadInt32(&desired) >= limit {
+					prevDelta = delta
+					continue
+				}
+				a := atomic.LoadInt32(&active)
+				if probing > 0 && a > 2 {
+					grown := prevDelta > 0 && float64(delta) > float64(prevDelta)*1.05
+					if !grown {
+						stall++
+						if stall >= 2 {
+							return // 连着两轮加了没效果，停下
+						}
+						prevDelta = delta
+						probing = 0
+						continue
+					}
+					stall = 0
+				}
+
+				// 试探性加一批：从 1 开始，连接越多一轮加得越多
+				//（1→2→3→4→6→9→13→19→28→32）
+				add := probing
+				if add < 1 {
+					add = 1
+				}
+				if half := atomic.LoadInt32(&active) / 2; half > add {
+					add = half
+				}
+				d := atomic.LoadInt32(&desired)
+				nd := d + add
+				if nd > limit {
+					nd = limit
+				}
+				if nd > d {
+					atomic.StoreInt32(&desired, nd)
+					probing = nd - d
+				}
+				prevDelta = delta
+			}
+		}
+	}()
 
 	n := startWorkers
 	if int64(n) > size/chunkSize && size/chunkSize > 0 {
@@ -555,73 +700,9 @@ func startHTTP(j *Job) {
 			n = 1
 		}
 	}
+	atomic.StoreInt32(&desired, int32(n))
 	for i := 0; i < n; i++ {
-		spawn()
-	}
-
-	// 自适应（类似 TCP 慢启动）：每 3 秒**主动**加一批 worker 试水，
-	// 下一轮看总速度涨没涨：涨了就继续加，连着两轮没涨就认定吃满了、停手。
-	//
-	// 之前写的是「等速度自己涨了才加」，但速度只有加了线程才会涨——
-	// 判断方向反了，实测 workers 恒等于起始值，等于没自适应（2026-11-10 修）。
-	if !j.NoGrow {
-		go func() {
-			t := time.NewTicker(3 * time.Second)
-			defer t.Stop()
-			var prev, prevDelta int64
-			var probing int32 // 上一轮加了多少个
-			stall := 0
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case <-t.C:
-					cur := atomic.LoadInt64(&total)
-					delta := cur - prev
-					prev = cur
-					if cur >= size {
-						return
-					}
-					a := atomic.LoadInt32(&active)
-					if a >= maxWorkers {
-						return
-					}
-
-					if probing > 0 && a > 2 {
-						// 上一轮加过线程：看效果。
-						// 从 1 个连接起头时前几轮基础太小、速度看不准，先无条件加上去。
-						grown := prevDelta > 0 && float64(delta) > float64(prevDelta)*1.05
-						if !grown {
-							stall++
-							if stall >= 2 {
-								return // 连着两轮加了没效果，停下
-							}
-							prevDelta = delta
-							probing = 0
-							continue
-						}
-						stall = 0
-					}
-
-					// 试探性加一批：从 1 开始，连接越多一轮加得越多
-					//（1→2→3→4→6→9→13→19→28→32，约 10 轮到顶）
-					add := probing
-					if add < 1 {
-						add = 1
-					}
-					if half := atomic.LoadInt32(&active) / 2; half > add {
-						add = half
-					}
-					var spawned int32
-					for i := int32(0); i < add && atomic.LoadInt32(&active) < maxWorkers; i++ {
-						spawn()
-						spawned++
-					}
-					probing = spawned
-					prevDelta = delta
-				}
-			}
-		}()
+		trySpawn()
 	}
 
 	wg.Wait()
