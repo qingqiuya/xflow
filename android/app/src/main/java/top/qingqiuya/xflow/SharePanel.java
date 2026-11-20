@@ -341,14 +341,13 @@ public class SharePanel {
 
     private void renderInbox(List<String[]> items) {
         inboxBox.removeAllViews();
+        android.view.View title = root.findViewById(R.id.historyTitle);
         if (items.isEmpty()) {
-            TextView t = new TextView(act);
-            t.setText("📥 还没有收到的文件");
-            t.setTextColor(Color.parseColor("#8b93a7"));
-            t.setTextSize(12.5f);
-            inboxBox.addView(t);
+            // 没有历史就整块不出现，别留一行“还没有收到的文件”占地方
+            if (title != null) title.setVisibility(android.view.View.GONE);
             return;
         }
+        if (title != null) title.setVisibility(android.view.View.VISIBLE);
         for (String[] it : items) {
             LinearLayout row = new LinearLayout(act);
             row.setGravity(Gravity.CENTER_VERTICAL);
