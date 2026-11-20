@@ -46,7 +46,7 @@
                 android:text="设备（自动发现）"
                 android:textColor="#8b93a7"
                 android:textSize="12sp"
-                android:paddingTop="18dp"
+                android:paddingTop="6dp"
                 android:paddingBottom="8dp" />
 
             <LinearLayout
@@ -90,21 +90,12 @@
                     android:textColor="#7fd4ff" />
             </LinearLayout>
 
-            <!-- 收件箱 -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="📥 收件箱（下载/XFlow）"
-                android:textColor="#8b93a7"
-                android:textSize="12sp"
-                android:paddingTop="20dp"
-                android:paddingBottom="8dp" />
-
             <LinearLayout
                 android:id="@+id/inboxBox"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical" />
+                android:orientation="vertical"
+                android:paddingTop="14dp" />
 
             <!-- 剪贴板 -->
             <TextView

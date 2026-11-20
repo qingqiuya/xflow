@@ -328,7 +328,7 @@ public class SharePanel {
         inboxBox.removeAllViews();
         if (items.isEmpty()) {
             TextView t = new TextView(act);
-            t.setText("还没有收到的文件");
+            t.setText("📥 还没有收到的文件");
             t.setTextColor(Color.parseColor("#8b93a7"));
             t.setTextSize(12.5f);
             inboxBox.addView(t);
