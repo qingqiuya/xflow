@@ -339,6 +339,38 @@ public class MainActivity extends Activity {
         }
     }
 
+    /** 一行「标签 + 地址」，点一下复制地址本身。 */
+    private TextView addrChip(String label, String copy) {
+        TextView t = new TextView(this);
+        t.setText(label);
+        t.setTextColor(0xFF5CC9FF);
+        t.setTextSize(13f);
+        t.setTypeface(android.graphics.Typeface.MONOSPACE);
+        t.setBackgroundResource(R.drawable.chip_bg);
+        t.setPadding(dp(10), dp(9), dp(10), dp(9));
+        t.setOnClickListener(v -> {
+            android.content.ClipboardManager cm =
+                    (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+            cm.setPrimaryClip(android.content.ClipData.newPlainText("XFlow", copy));
+            Toast.makeText(this, "已复制 " + copy + "（粘到「手动加地址」就能发）", Toast.LENGTH_SHORT).show();
+        });
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        lp.bottomMargin = dp(6);
+        t.setLayoutParams(lp);
+        return t;
+    }
+
+    /** 从 http://10.11.11.100:17777 里抠出 10.11.11.100 */
+    private static String guessIpv4(String url) {
+        try {
+            java.net.URI u = new java.net.URI(url);
+            return u.getHost() == null ? url : u.getHost();
+        } catch (Exception e) {
+            return url.replaceAll("^https?://", "").replaceAll(":\\d+$", "");
+        }
+    }
+
     /** API 用法说明：自己搭布局，跟 App 的深色风格对齐（系统弹窗是灰底） */
     private void showApiDoc() {
         String ip = localIP();
@@ -367,22 +399,10 @@ public class MainActivity extends Activity {
         state.setPadding(0, dp(4), 0, dp(12));
         box.addView(state);
 
-        // 地址一行，可点复制（有 IPv6 就一起显示）
-        TextView addr = new TextView(this);
-        addr.setText(ip6.isEmpty() ? base : base + "\n[" + ip6 + "]:" + port);
-        addr.setTextColor(0xFF5CC9FF);
-        addr.setTextSize(13.5f);
-        addr.setTypeface(android.graphics.Typeface.MONOSPACE);
-        addr.setBackgroundResource(R.drawable.chip_bg);
-        addr.setPadding(dp(10), dp(9), dp(10), dp(9));
-        addr.setOnClickListener(v -> {
-            android.content.ClipboardManager cm =
-                    (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
-            cm.setPrimaryClip(android.content.ClipData.newPlainText("XFlow", base));
-            Toast.makeText(this, "已复制地址", Toast.LENGTH_SHORT).show();
-        });
-        box.addView(addr, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        // IPv4 / IPv6 分开列，各自点一下就复制纯 IP
+        // （纯 IP 粘到互传页的「手动加地址」里就能直接发，端口默认 17777）
+        if (!ip.isEmpty()) box.addView(addrChip("IPv4  " + ip, guessIpv4(ip)));
+        if (!ip6.isEmpty()) box.addView(addrChip("IPv6  [" + ip6 + "]", ip6));
 
         TextView body = new TextView(this);
         body.setTextColor(0xFFC9D2E3);
