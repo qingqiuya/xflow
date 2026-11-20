@@ -453,9 +453,17 @@ public class DownloadService extends Service {
                 j.err = "HTTP " + code;
                 return;
             } else {
+                // 有些站点对 Range 请求直接回 200 + 一小段 JSON 错误体，
+                // 光看状态码会把它当成文件下下来还显示「完成」。
+                String ct = c.getContentType() == null ? "" : c.getContentType().toLowerCase();
+                long len = c.getContentLengthLong();
+                if (ct.contains("application/json") && len >= 0 && len < 8192) {
+                    j.state = "error";
+                    j.err = "对方返回的是错误信息（JSON " + len + " 字节），不是文件";
+                    return;
+                }
                 ranges = c.getHeaderField("Accept-Ranges") != null
                         && "bytes".equalsIgnoreCase(c.getHeaderField("Accept-Ranges"));
-                long len = c.getContentLengthLong();
                 if (len > 0) size = len;
             }
         } catch (Exception e) {
