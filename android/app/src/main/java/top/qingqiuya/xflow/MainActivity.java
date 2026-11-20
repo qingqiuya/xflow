@@ -33,6 +33,7 @@ public class MainActivity extends Activity {
 
     private EditText urlEdit, nameEdit;
     private ApiServer api;
+    private LocalSendServer ls;
     private Beacon beacon;
     private SharePanel sharePanel;
     private int curPage = 0;
@@ -90,6 +91,13 @@ public class MainActivity extends Activity {
         // 广播常开：只告诉别人「我在这、叫什么、HTTP 端口多少」，
         // 不加任务不动数据，所以不用等用户点开关
         beacon.start(ApiServer.DEFAULT_PORT);
+        // LocalSend v2 兼容层（53317）：装了 LocalSend 的设备能直接发文件给这台手机。
+        // 端口感 53317 被真 LocalSend 占了就自己安静退出（见 LocalSendServer.start）。
+        try {
+            ls = new LocalSendServer(this);
+            ls.start();
+        } catch (Exception ignored) {
+        }
         paintApiChip(apiChip, apiOn);
         // 互传开关（跟 API 一样能关）
         final TextView shareChip = findViewById(R.id.shareChip);
