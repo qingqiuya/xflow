@@ -169,4 +169,23 @@ public class Transfer {
         }
         out.flush();
     }
+
+    /** 删掉一个收到的文件。content:// 走 MediaStore，file:// 直接删；返回是否成功。 */
+    public static boolean delete(Context ctx, String uriStr) {
+        if (uriStr == null || uriStr.isEmpty()) return false;
+        try {
+            Uri u = Uri.parse(uriStr);
+            if ("content".equals(u.getScheme())) {
+                // 自己插进 MediaStore 的文件，App 有权直接删（Android 10+ 不需要额外权限）
+                return res(ctx).delete(u, null, null) > 0;
+            }
+            if ("file".equals(u.getScheme())) {
+                File f = new File(u.getPath());
+                return f.exists() && f.delete();
+            }
+        } catch (Exception e) {
+            Log.w("xflow-xfer", "删除失败：" + e.getMessage());
+        }
+        return false;
+    }
 }

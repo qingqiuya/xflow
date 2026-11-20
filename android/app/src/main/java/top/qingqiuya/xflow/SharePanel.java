@@ -369,6 +369,27 @@ public class SharePanel {
                 new Thread(() -> uploadFromUri(u, it[0], querySizeOf(u), t)).start();
             });
             row.addView(send);
+
+            TextView del = new TextView(act);
+            del.setText("删除");
+            del.setTextColor(Color.parseColor("#ff8a80"));
+            del.setTextSize(12.5f);
+            del.setPadding(dp(10), dp(6), dp(4), dp(6));
+            del.setOnClickListener(v -> {
+                new android.app.AlertDialog.Builder(act)
+                        .setTitle("删除文件")
+                        .setMessage(it[0] + "？删了就找不回来了。")
+                        .setPositiveButton("删除", (d, w) -> new Thread(() -> {
+                            boolean ok = Transfer.delete(act, it[2]);
+                            ui.post(() -> {
+                                say(ok ? ("已删除：" + it[0]) : "删不掉（可能被别的 App 占用或权限不足）");
+                                if (ok) loadInbox();
+                            });
+                        }).start())
+                        .setNegativeButton("算了", null)
+                        .show();
+            });
+            row.addView(del);
             inboxBox.addView(row);
         }
     }
