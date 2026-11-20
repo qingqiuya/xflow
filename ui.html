@@ -146,6 +146,16 @@ button:active{transform:scale(.97)}
 .pbar.on{display:block}
 .pbar i{display:block;height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,#5cc9ff,#3ddc84);transition:width .12s}
 .drop-foot{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:8px;min-height:18px;font-size:11.5px;color:#6b7488}
+.qwrap{margin:0 0 14px}
+.qhead{display:flex;align-items:center;font-size:12.5px;color:#8b93a7;margin-bottom:7px}
+.qlist{display:flex;flex-direction:column;gap:6px;max-height:210px;overflow:auto}
+.qitem{position:relative;display:flex;align-items:center;gap:9px;background:#141821;border:1px solid #2b3446;border-radius:9px;padding:8px 11px;font-size:12.5px;overflow:hidden}
+.qitem .qi{flex:0 0 auto}
+.qitem .qn{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.qitem .qs{font-size:11.5px;color:#8b93a7;flex:0 0 auto;max-width:130px;overflow:hidden;text-overflow:ellipsis}
+.qitem.ok{border-color:rgba(61,220,132,.45)}
+.qitem.bad{border-color:rgba(255,107,107,.45)}
+.qitem .qbar{position:absolute;left:0;bottom:0;height:2px;background:var(--acc);transition:width .2s;width:0}
 .pickrow{display:flex;gap:12px;justify-content:center;align-items:center;margin-top:15px}
 .primary.sm{padding:7px 18px;font-size:13px;border-radius:9px}
 .linky{background:none;border:0;color:#6b7488;font-size:12.5px;cursor:pointer;padding:4px 2px;text-decoration:underline;text-underline-offset:3px;text-decoration-color:#3a4457}
@@ -278,6 +288,13 @@ button:active{transform:scale(.97)}
     </div>
     <div class="pbar" id="pbar"><i id="pfill"></i></div>
     <div class="drop-foot"><span id="pinfo"></span><button class="tiny" id="sendCancel" style="display:none">取消</button></div>
+  </div>
+  <div class="qwrap" id="shQueueWrap" style="display:none">
+    <div class="qhead"><span id="shQTip">待发</span><span class="grow" style="flex:1"></span>
+      <button class="tiny" id="shQClear">清空</button></div>
+    <div class="qlist" id="shQueue"></div>
+    <div style="display:flex;justify-content:flex-end;margin-top:8px">
+      <button class="primary sm" id="shQSend">发送</button></div>
   </div>
 
   <!-- 收件箱 -->
@@ -528,7 +545,7 @@ function shProgress(done, total, label){
   if(info) info.textContent = label || '';
 }
 
-function uploadOne(file, relPath){
+function uploadOne(file, relPath, onPct){
   return new Promise((resolve,reject)=>{
     const xhr=new XMLHttpRequest(); curXhr=xhr;
     xhr.open('POST', shBase()+'/api/upload');
@@ -541,8 +558,11 @@ function uploadOne(file, relPath){
     const base=curSent;
     xhr.upload.onprogress=e=>{
       if(!e.lengthComputable) return;
-      const done=base+e.loaded;
-      shProgress(done, curTotal, ((done/curTotal)*100).toFixed(0)+'% · '+(done/1048576).toFixed(1)+'/'+(curTotal/1048576).toFixed(1)+' MB');
+      if(onPct) onPct(file.size ? (e.loaded/file.size*100) : 0);
+      if(curTotal>0){
+        const done=base+e.loaded;
+        shProgress(done, curTotal, ((done/curTotal)*100).toFixed(0)+'% · '+(done/1048576).toFixed(1)+'/'+(curTotal/1048576).toFixed(1)+' MB');
+      }
     };
     xhr.onload=()=>{
       let d=null; try{ d=JSON.parse(xhr.responseText) }catch(err){}
@@ -575,44 +595,93 @@ function readEntry(entry, prefix, out){
   });
 }
 
-async function shSendFiles(files, paths){
-  const msg=document.getElementById('shMsg');
+// 待发队列：选完/拖完先进这里，确认再发（以前是选完立刻闷头发，发错了来不及撤）
+let pending=[];
+let qSending=false;
+
+function addToQueue(files, paths){
   if(!shPeer){ alert('先选一台设备'); return }
-  if(sending){ alert('正在发，等这批发完'); return }
-  const list=(files||[]).map((f,i)=>({file:f, path:(paths&&paths[i])||f.name}));
-  if(!list.length) return;
-  sending=true;
-  const pickRow=document.getElementById('pickRow');
-  if(pickRow) pickRow.style.display='none';
-  document.getElementById('dropZone').classList.add('tight');
-  const cancelBtn=document.getElementById('sendCancel');
-  if(cancelBtn) cancelBtn.style.display='inline-block';
-  curTotal=list.reduce((a,x)=>a+x.file.size,0); curSent=0;
-  let okN=0, lastErr='';
-  const title=document.getElementById('dropTitle');
-  try{
-    for(let i=0;i<list.length;i++){
-      const it=list[i];
-      if(title) title.textContent='发送中 '+(i+1)+'/'+list.length+'：'+it.file.name;
-      if(msg) msg.textContent='';
-      await uploadOne(it.file, it.path).then(()=>okN++).catch(e=>{ lastErr=e.message||String(e); throw e });
-      curSent+=it.file.size;
-    }
-    shProgress(curTotal, curTotal, '100%');
-    if(msg) msg.textContent='已发送 '+okN+' 个文件到 '+shPeer.name;
-    if(title) title.textContent='拖文件或文件夹到这里';
-    if(okN) shLoadInbox();
-  }catch(err){
-    if(msg) msg.textContent='发了 '+okN+'/'+list.length+' 个，失败：'+(err.message||err);
-    if(title) title.textContent='点这里选文件，或拖进来';
-  }finally{
-    sending=false; curXhr=null;
-    if(cancelBtn) cancelBtn.style.display='none';
-    if(pickRow) pickRow.style.display='';
-    document.getElementById('dropZone').classList.remove('tight');
-    setTimeout(()=>{ const b=document.getElementById('pbar'); if(b) b.classList.remove('on') }, 2500);
+  (files||[]).forEach((f,i)=>{
+    pending.push({ file:f, path:(paths&&paths[i])||f.name, size:f.size||0, state:'wait', pct:0 });
+  });
+  renderQueue();
+}
+
+function renderQueue(){
+  const wrap=document.getElementById('shQueueWrap');
+  const box=document.getElementById('shQueue');
+  if(!wrap||!box) return;
+  if(!pending.length){ wrap.style.display='none'; return }
+  wrap.style.display='';
+  const total=pending.reduce((a,x)=>a+(x.size||0),0);
+  const qtip=document.getElementById('shQTip');
+  if(qtip) qtip.textContent='待发 '+pending.length+' 个 · '+fs(total);
+  box.innerHTML=pending.map((it,i)=>{
+    const st = it.state==='sending' ? Math.round(it.pct)+'%'
+      : it.state==='done' ? '已完成'
+      : it.state==='error' ? (it.err||'失败')
+      : fs(it.size);
+    const cls = it.state==='done'?' ok':(it.state==='error'?' bad':'');
+    return '<div class="qitem'+cls+'" data-i="'+i+'">'
+      +'<span class="qi">'+(it.state==='done'?'✅':(it.state==='error'?'⚠️':'📄'))+'</span>'
+      +'<span class="qn" title="'+esc(it.path)+'">'+esc(it.file.name)+'</span>'
+      +'<span class="qs">'+esc(st)+'</span>'
+      +'<button class="tiny qx" data-i="'+i+'"'+(it.state==='sending'?' disabled':'')+'>'+(it.state==='error'?'重试':'移除')+'</button>'
+      +'<i class="qbar" style="width:'+(it.pct||0)+'%"></i></div>';
+  }).join('');
+  box.querySelectorAll('.qx').forEach(b=>{
+    b.onclick=(ev)=>{
+      ev.stopPropagation();
+      const i=parseInt(b.dataset.i,10);
+      if(!pending[i]) return;
+      if(pending[i].state==='error'){ pending[i].state='wait'; pending[i].err=''; pending[i].pct=0; }
+      else pending.splice(i,1);
+      renderQueue();
+    };
+  });
+  const send=document.getElementById('shQSend');
+  if(send){
+    const left=pending.filter(x=>x.state!=='done').length;
+    send.disabled=qSending||!left;
+    send.textContent=qSending?'发送中…':('发送 '+left+' 个');
   }
 }
+
+async function sendQueue(){
+  const msg=document.getElementById('shMsg');
+  if(!shPeer){ alert('先选一台设备'); return }
+  if(qSending) return;
+  const todo=pending.filter(x=>x.state==='wait'||x.state==='error');
+  if(!todo.length) return;
+  qSending=true; sending=true; renderQueue();
+  let ok=0, bad=0;
+  for(const it of todo){
+    it.state='sending'; it.pct=0; it.err=''; renderQueue();
+    try{
+      await uploadOne(it.file, it.path, p=>{ it.pct=p; renderQueue(); });
+      it.state='done'; it.pct=100; ok++;
+    }catch(e){
+      const m=(e&&e.message)||String(e);
+      if(m.indexOf('已取消')>=0){ it.state='wait'; it.pct=0; qSending=false; sending=false; renderQueue(); if(msg) msg.textContent='已取消'; return }
+      it.state='error'; it.err=m; bad++;
+    }
+    renderQueue();
+  }
+  qSending=false; sending=false;
+  if(msg) msg.textContent = bad ? ('发出 '+ok+' 个，失败 '+bad+' 个') : ('已发 '+ok+' 个文件到 '+shortDevName(shPeer.name, shPeer.ip));
+  if(ok) shLoadInbox();
+  setTimeout(()=>{ pending=pending.filter(x=>x.state!=='done'); renderQueue(); }, 3000);
+}
+
+// 兼容老调用点：选文件/拖拽进来先入队
+function shSendFiles(files, paths){
+  if(!shPeer){ alert('先选一台设备'); return }
+  if(qSending){ alert('正在发，等这批发完'); return }
+  addToQueue(files, paths);
+}
+
+document.getElementById('shQSend').onclick=()=>sendQueue();
+document.getElementById('shQClear').onclick=()=>{ if(qSending) return; pending=[]; renderQueue(); };
 
 document.getElementById('pickFile').onclick=e=>{
   e.stopPropagation(); document.getElementById('shFile').click();
