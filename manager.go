@@ -25,6 +25,9 @@ type Job struct {
 	FilePath string    `json:"file_path"`
 
 	SegN     int       `json:"seg_n,omitempty"` // 并发分块数（0=自动）
+	// Single 为真时强制单连接：不分段、不增长。给插件接管小文件用 ——
+	// 几十 KB 的文件开 16 路分段，建连接的开销比下载本身还大。
+	Single   bool      `json:"single,omitempty"`
 	Workers  int       `json:"workers,omitempty"` // 当前活跃连接数（自适应）
 	Segments []Segment `json:"segments,omitempty"`
 
@@ -109,6 +112,12 @@ func (m *Manager) AddHTTP(url, name, dir string, segN int) (*Job, error) {
 
 // AddHTTPWithHeaders 比 AddHTTP 多一组请求头（浏览器插件接管下载时用）。
 func (m *Manager) AddHTTPWithHeaders(url, name, dir string, segN int, headers map[string]string) (*Job, error) {
+	return m.AddHTTPEx(url, name, dir, segN, headers, false)
+}
+
+// AddHTTPEx 在 AddHTTPWithHeaders 之上再多一个「强制单连接」开关。
+// 浏览器插件对小于 1MB 的文件传 single=true，避免分段开销大于下载本身。
+func (m *Manager) AddHTTPEx(url, name, dir string, segN int, headers map[string]string, single bool) (*Job, error) {
 	if segN <= 0 {
 		segN = 16
 	}
@@ -126,6 +135,7 @@ func (m *Manager) AddHTTPWithHeaders(url, name, dir string, segN int, headers ma
 		Dir:     dir,
 		State:   "queued",
 		SegN:    segN,
+		Single:  single,
 		Headers: headers,
 		Created: time.Now(),
 	}

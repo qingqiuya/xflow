@@ -322,8 +322,8 @@ func startHTTP(j *Job) {
 		return
 	}
 
-	if !supportRange || size <= 0 {
-		// 单流
+	if !supportRange || size <= 0 || j.Single {
+		// 单流（j.Single 是插件对小文件指定的强制单连接）
 		f.Truncate(0)
 		var done int64
 		j.mu.Lock()

@@ -214,6 +214,7 @@ func main() {
 			Referer string `json:"referer"`
 			Cookie  string `json:"cookie"`
 			Segs    int    `json:"segs"`
+			Single  bool   `json:"single"` // 强制单连接（插件接管小文件时用）
 		}
 		if err := json.NewDecoder(r.Body).Decode(&d); err != nil {
 			json.NewEncoder(w).Encode(map[string]any{"ok": false, "err": "请求体不是合法 JSON"})
@@ -257,7 +258,7 @@ func main() {
 		if d.Cookie != "" {
 			h["Cookie"] = d.Cookie
 		}
-		j, err := mgr.AddHTTPWithHeaders(src, name, dir, d.Segs, h)
+		j, err := mgr.AddHTTPEx(src, name, dir, d.Segs, h, d.Single)
 		if err != nil {
 			json.NewEncoder(w).Encode(map[string]any{"ok": false, "err": err.Error()})
 			return

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "汐流下载器 · 接管浏览器下载",
-  "version": "1.6.31",
+  "version": "1.6.32",
   "description": "把浏览器的下载转给本机运行的汐流（XFlow）下载器：多线程、断点续传、BT。",
   "permissions": [
     "downloads",
@@ -18,6 +18,19 @@
   "background": {
     "service_worker": "background.js"
   },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["page-hook.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["bridge.js"],
+      "run_at": "document_start"
+    }
+  ],
   "action": {
     "default_popup": "popup.html",
     "default_title": "汐流下载器"

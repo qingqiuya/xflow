@@ -13,7 +13,8 @@ const DEFAULTS = {
   port: 17777,
   notify: true,
   segs: 16,
-  minMB: 1, // 小于这个尺寸不接管，交回浏览器（小文件走下载器反而慢）
+  minMB: 0.25, // 小于这个尺寸不接管，交回浏览器（256KB 以下建任务的开销大于下载）
+  singleUnder: 1, // 小于这个尺寸（MB）让下载器走单连接，不分段不增长
   pauseUntil: 0, // 暂停接管：0=没暂停；>0=到那个时间点；-1=一直暂停到手动恢复
 };
 const MENU_ID = "xflow-download-link";
@@ -103,7 +104,9 @@ function launchApp(url, name) {
 }
 
 // 推任务给 XFlow；失败抛错，调用方据此决定是否取消浏览器下载
-async function push(url, name, referer, cookie, dir) {
+// size > 0 时自带 single 判断：小文件强制单连接
+async function push(url, name, referer, cookie, dir, size) {
+  const single = size > 0 && size < C.singleUnder * 1024 * 1024;
   const body = JSON.stringify({
     url,
     name: name || "",
@@ -111,6 +114,7 @@ async function push(url, name, referer, cookie, dir) {
     cookie: cookie || "",
     dir: dir || "",
     segs: C.segs,
+    single,
   });
   let r;
   try {
@@ -135,7 +139,11 @@ function shouldTake(item) {
   if (!C.enabled) return false;
   if (isPaused(C)) return false;
   if (!item || item.state !== "in_progress" || item.error) return false;
-  if (!/^https?:\/\//i.test(item.url || "")) return false; // blob: / data: / ftp:
+  const u = item.url || "";
+  // blob: 也接 —— 页面里 fetch 完原文件再 createObjectURL 的站点非常多，
+  // takeover 里会去页面上反查真实地址，查不到就放过。data:/ftp: 仍然不管。
+  const isBlob = /^blob:https?:\/\//i.test(u);
+  if (!isBlob && !/^https?:\/\//i.test(u)) return false;
   if (item.byExtensionId) return false; // 别的扩展（含自己）发起的，不抢
   if (item.incognito) return false;
 
@@ -161,12 +169,56 @@ function claim(item) {
   return true;
 }
 
+// blob:https://host/uuid → 去那个页面问 page-hook：它是从哪个 http 地址来的。
+// 拿不到（页面没刷新过、站点用 canvas 生成、是 MSE 分片）就返回 null，交回浏览器。
+async function resolveBlob(item) {
+  const m = /^blob:(https?:\/\/[^/]+)/i.exec(item.url || "");
+  if (!m) return null;
+  const origin = m[1];
+  let tabs = [];
+  try {
+    tabs = await chrome.tabs.query({});
+  } catch (e) {
+    return null;
+  }
+  const cand = tabs.filter((t) => t.url && t.url.indexOf(origin) === 0);
+  const tab =
+    cand.find((t) => item.referrer && t.url === item.referrer) ||
+    cand.find((t) => t.active) ||
+    cand[0];
+  if (!tab) return null;
+  try {
+    const r = await chrome.tabs.sendMessage(tab.id, { type: "blobInfo", url: item.url });
+    if (r && r.info && /^https?:\/\//i.test(r.info.from || "")) {
+      return { url: r.info.from, pageUrl: tab.url };
+    }
+  } catch (e) {
+    // 页面里没有桥接脚本：多半是插件刚更新、这个标签页还没刷新
+  }
+  return null;
+}
+
 // 接管一条下载：先发，成功了才取消浏览器那边
 async function takeover(item) {
-  const name = baseName(item.filename) || nameFromURL(item.url);
-  const cookie = await cookieHeader(item.url);
+  let url = item.url;
+  let referer = item.referrer || "";
+  const isBlob = /^blob:/i.test(url || "");
+
+  if (isBlob) {
+    const r = await resolveBlob(item);
+    if (!r) {
+      await notify("blob 没找到原址，交回浏览器", baseName(item.filename) || "（页面刷新后能接管的更多）");
+      return; // 浏览器那条下载没动过，文件不丢
+    }
+    url = r.url;
+    if (r.pageUrl) referer = r.pageUrl;
+  }
+
+  const name = baseName(item.filename) || nameFromURL(url);
+  const cookie = await cookieHeader(url);
+  const size = item.totalBytes > 0 ? item.totalBytes : item.fileSize > 0 ? item.fileSize : -1;
   try {
-    await push(item.url, name, item.referrer || "", cookie);
+    await push(url, name, referer, cookie, "", size);
     try {
       await chrome.downloads.cancel(item.id);
       await chrome.downloads.erase({ id: item.id });
@@ -215,7 +267,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const name = isMagnet ? "" : nameFromURL(url);
   const cookie = isMagnet ? "" : await cookieHeader(url);
   try {
-    await push(url, name, (tab && tab.url) || "", cookie);
+    await push(url, name, (tab && tab.url) || "", cookie, "", -1);
     await notify("已转给汐流", name || url);
   } catch (e) {
     await notify("汐流没接住", `${e.message}（确认 XFlow 在运行？）`);
