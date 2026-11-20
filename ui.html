@@ -794,6 +794,8 @@ document.getElementById('pickDir').onclick=e=>{
   ['dragenter','dragover'].forEach(t=>dz.addEventListener(t,e=>{e.preventDefault();dz.classList.add('hot')}));
   ['dragleave','drop'].forEach(t=>dz.addEventListener(t,e=>{e.preventDefault();dz.classList.remove('hot')}));
   dz.addEventListener('drop',async e=>{
+    e.preventDefault();
+    e.stopPropagation();   // 别让全局那个「当种子」的监听也收到
     if(!shPeer){ alert('先选一台设备'); return }
     const items=Array.from((e.dataTransfer&&e.dataTransfer.items)||[]);
     const entries=items.map(it=>it.webkitGetAsEntry?it.webkitGetAsEntry():null).filter(Boolean);
@@ -1005,12 +1007,18 @@ $('#torrentFile').onchange=async e=>{
   if(!r.ok){alert(r.err||'加不上这个种子');return}
   load();
 };
-// 拖一个 .torrent 到窗口里也认
+// 拖一个 .torrent 到窗口里也认（只在下载页；互传页的拖放归互传自己管）
 document.addEventListener('dragover',e=>{e.preventDefault()});
 document.addEventListener('drop',async e=>{
+  const shPage = document.getElementById('pageSh');
+  if (shPage && shPage.classList.contains('on')) return;   // 互传页：交给那边处理
   e.preventDefault();
   const f=e.dataTransfer.files&&e.dataTransfer.files[0];
-  if(!f)return; // 不看后缀，服务端会解析内容，不是种子会退回来
+  if(!f)return;
+  if(!/\.torrent$/i.test(f.name)){
+    alert('这里只认 .torrent 种子文件。\n想下这个文件，把它的下载链接粘左上角；想发给别的设备，切到「互传」页再拖。');
+    return;
+  }
   const fd=new FormData();
   fd.append('file',f);
   const r=await (await fetch('/api/torrent',{method:'POST',body:fd})).json();
