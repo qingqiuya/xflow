@@ -285,6 +285,23 @@ public class SharePanel {
             tag.setTextSize(12.5f);
             row.addView(tag);
 
+            // 手动加的设备给个明确的删除入口（以前只能长按，没人知道）
+            if ("manual".equals(p.platform)) {
+                TextView del = new TextView(act);
+                del.setText("✕");
+                del.setTextColor(Color.parseColor("#ff8a80"));
+                del.setTextSize(15f);
+                del.setPadding(dp(10), dp(2), dp(2), dp(6));
+                del.setOnClickListener(v -> {
+                    targets.remove(keyOf(p));
+                    manual.remove(p);
+                    saveManual();
+                    refreshDevices();
+                    say("已移除手动设备 " + p.ip);
+                });
+                row.addView(del);
+            }
+
             row.setOnClickListener(v -> {
                 // 多选：点一下勾上，再点取消；可以勾好几台一次发
                 if (on) {
