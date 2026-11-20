@@ -471,11 +471,10 @@ func startHTTP(j *Job) {
 	j.mu.Unlock()
 
 	var (
-		wg      sync.WaitGroup
-		total   int64
-		active  int32
-		idSeq   int32
-		desired int32
+		wg     sync.WaitGroup
+		total  int64
+		active int32
+		idSeq  int32
 	)
 
 	// ceiling 是当前任务允许的最大并发（界面上填的数，1..32），运行时可改。
@@ -491,7 +490,7 @@ func startHTTP(j *Job) {
 		}
 		return int32(n)
 	}
-	atomic.StoreInt32(&desired, int32(startWorkers))
+	atomic.StoreInt32(&j.desired, int32(startWorkers))
 
 	atomic.StoreInt64(&total, doneBytes)
 	// 每 5 秒把已完成块落盘，断流/断电都不至于白下
@@ -528,7 +527,7 @@ func startHTTP(j *Job) {
 		}
 		for {
 			for {
-				d := atomic.LoadInt32(&desired)
+				d := atomic.LoadInt32(&j.desired)
 				a := atomic.LoadInt32(&active)
 				if a <= d {
 					break
@@ -584,7 +583,7 @@ func startHTTP(j *Job) {
 	// trySpawn：把 active 抬到 desired（CAS 保证不会超开）
 	trySpawn := func() bool {
 		for {
-			d := atomic.LoadInt32(&desired)
+			d := atomic.LoadInt32(&j.desired)
 			a := atomic.LoadInt32(&active)
 			if a >= d || a >= maxWorkers {
 				return false
@@ -655,7 +654,7 @@ func startHTTP(j *Job) {
 					continue
 				}
 				limit := ceiling()
-				if atomic.LoadInt32(&desired) >= limit {
+				if atomic.LoadInt32(&j.desired) >= limit {
 					prevDelta = delta
 					continue
 				}
@@ -683,13 +682,13 @@ func startHTTP(j *Job) {
 				if half := atomic.LoadInt32(&active) / 2; half > add {
 					add = half
 				}
-				d := atomic.LoadInt32(&desired)
+				d := atomic.LoadInt32(&j.desired)
 				nd := d + add
 				if nd > limit {
 					nd = limit
 				}
 				if nd > d {
-					atomic.StoreInt32(&desired, nd)
+					atomic.StoreInt32(&j.desired, nd)
 					probing = nd - d
 				}
 				prevDelta = delta
@@ -704,7 +703,7 @@ func startHTTP(j *Job) {
 			n = 1
 		}
 	}
-	atomic.StoreInt32(&desired, int32(n))
+	atomic.StoreInt32(&j.desired, int32(n))
 	for i := 0; i < n; i++ {
 		trySpawn()
 	}
