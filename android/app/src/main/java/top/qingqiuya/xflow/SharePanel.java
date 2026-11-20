@@ -54,6 +54,7 @@ public class SharePanel {
     private final List<Beacon.Peer> manual = new ArrayList<>();
 
     private LinearLayout devicesBox, inboxBox;
+    private android.widget.Button pickBtn;
     private TextView targetText, status, selfTag;
     private String lastDevSig = "";
     private String lastInboxSig = "";
@@ -76,7 +77,9 @@ public class SharePanel {
         addrInput = root.findViewById(R.id.addrInput);
 
         root.findViewById(R.id.addrAdd).setOnClickListener(v -> addManual());
-        root.findViewById(R.id.pickFile).setOnClickListener(v -> pickFile());
+        final android.widget.Button pickBtn = root.findViewById(R.id.pickFile);
+        pickBtn.setOnClickListener(v -> pickFile());
+        this.pickBtn = pickBtn;
         root.findViewById(R.id.clipSend).setOnClickListener(v -> sendMyClipboard());
         root.findViewById(R.id.clipGet).setOnClickListener(v -> showTextDialog());
 
@@ -268,10 +271,12 @@ public class SharePanel {
                     // 再点一次取消：之前选中后没法取消，只能选别的
                     target = null;
                     targetText.setText("还没选设备 —— 下面点一个");
+                    paintPick();
                     say("");
                 } else {
                     target = p;
                     targetText.setText(p.name + "\n" + p.ip);
+                    paintPick();
                     say("");
                 }
                 renderDevices(list);
@@ -413,6 +418,12 @@ public class SharePanel {
     }
 
     // ---------------------------------------------------------------- 动作
+
+    /** 底部按钮直接写明发给谁，省掉上面那块重复的「发送到」 */
+    private void paintPick() {
+        if (pickBtn == null) return;
+        pickBtn.setText(target == null ? "选择文件发送…" : ("发送到 " + target.name));
+    }
 
     private void pickFile() {
         if (target == null) {

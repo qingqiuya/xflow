@@ -20,11 +20,12 @@
             android:orientation="vertical"
             android:paddingTop="6dp">
 
-            <!-- 当前目标 -->
+            <!-- 当前目标：下面设备卡片已经高亮了，这块重复又占地方，收起来 -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
+                android:visibility="gone"
                 android:background="@drawable/card"
                 android:padding="14dp">
 
