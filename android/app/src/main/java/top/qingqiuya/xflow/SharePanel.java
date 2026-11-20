@@ -172,8 +172,13 @@ public class SharePanel {
         Runnable[] tick = new Runnable[1];
         tick[0] = () -> {
             List<Beacon.Peer> list = new ArrayList<>();
+            // 先剔掉自己：手机也会广播 _xflow._tcp，不过滤的话设备列表里会有一台「自己」
+            String selfIp = localIpTag();
             synchronized (Beacon.PEERS) {
-                list.addAll(Beacon.PEERS.values());
+                for (Beacon.Peer p : Beacon.PEERS.values()) {
+                    if (p.ip != null && p.ip.equals(selfIp)) continue;
+                    list.add(p);
+                }
             }
             list.addAll(manual);
             // LocalSend 设备（别人手机/电脑上装的官方客户端）：组播里见到的

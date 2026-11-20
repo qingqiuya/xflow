@@ -306,7 +306,7 @@ public class MainActivity extends Activity {
                 tv.setTextSize(11.5f);
                 tv.setTextColor(0xFF8B93A7);
                 tv.setPadding(0, dp(2), 0, dp(2));
-                tv.setText("· " + (p.name.isEmpty() ? p.ip : p.name) + "  " + p.ip + ":" + p.port);
+                tv.setText("· " + (p.name.isEmpty() ? p.ip : p.name) + "  " + p.ip);
                 final String addr = "http://" + p.ip + ":" + p.port;
                 tv.setOnClickListener(v -> {
                     android.content.ClipboardManager cm =
@@ -320,7 +320,7 @@ public class MainActivity extends Activity {
             for (int i = 0; i < list.size(); i++) {
                 Beacon.Peer p = list.get(i);
                 ((TextView) box.getChildAt(i)).setText(
-                        "· " + (p.name.isEmpty() ? p.ip : p.name) + "  " + p.ip + ":" + p.port);
+                        "· " + (p.name.isEmpty() ? p.ip : p.name) + "  " + p.ip);
             }
         }
     }
