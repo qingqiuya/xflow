@@ -185,16 +185,33 @@ func probeFastest(urls []string) string {
 
 // startBili 是 B 站视频任务的主体。
 func startBili(j *Job) {
+	ctx := j.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	j.State = "downloading"
-	bvid := resolveBvid(j.Source)
-	if bvid == "" {
+	// 暂停不能算错误：ctx 被 cancel 时把状态写成 paused，恢复后能接着重下。
+	fail := func(msg string) {
+		j.mu.Lock()
+		defer j.mu.Unlock()
+		if ctx.Err() != nil {
+			j.State = "paused"
+			j.Err = ""
+			return
+		}
+		appLog("bili id=%s 失败：%s", j.ID, msg)
 		j.State = "error"
-		j.Err = "认不出 BV 号"
+		j.Err = msg
+	}
+	bvid := resolveBvid(j.Source)
+	appLog("bili id=%s bvid=%s 开始解析", j.ID, bvid)
+	if bvid == "" {
+		fail("认不出 BV 号")
 		return
 	}
 
 	var view struct {
-		Code int `json:"code"`
+		Code int    `json:"code"`
 		Msg  string `json:"message"`
 		Data struct {
 			Title string `json:"title"`
@@ -202,13 +219,11 @@ func startBili(j *Job) {
 		} `json:"data"`
 	}
 	if err := biliGetJSON("https://api.bilibili.com/x/web-interface/view?bvid="+bvid, &view); err != nil {
-		j.State = "error"
-		j.Err = "取视频信息失败：" + err.Error()
+		fail("取视频信息失败：" + err.Error())
 		return
 	}
 	if view.Code != 0 {
-		j.State = "error"
-		j.Err = fmt.Sprintf("B 站返回 %d：%s", view.Code, view.Msg)
+		fail(fmt.Sprintf("B 站返回 %d：%s", view.Code, view.Msg))
 		return
 	}
 	title := strings.TrimSpace(view.Data.Title)
@@ -217,9 +232,10 @@ func startBili(j *Job) {
 	}
 	j.Name = title
 	cid := view.Data.Cid
+	appLog("bili id=%s cid=%d 标题=%q", j.ID, cid, title)
 
 	var pu struct {
-		Code int `json:"code"`
+		Code int    `json:"code"`
 		Msg  string `json:"message"`
 		Data struct {
 			Dash struct {
@@ -230,18 +246,15 @@ func startBili(j *Job) {
 	}
 	u := fmt.Sprintf("https://api.bilibili.com/x/player/playurl?bvid=%s&cid=%d&qn=112&fnval=16&fourk=1", bvid, cid)
 	if err := biliGetJSON(u, &pu); err != nil {
-		j.State = "error"
-		j.Err = "取播放地址失败：" + err.Error()
+		fail("取播放地址失败：" + err.Error())
 		return
 	}
 	if pu.Code != 0 {
-		j.State = "error"
-		j.Err = fmt.Sprintf("playurl 返回 %d：%s", pu.Code, pu.Msg)
+		fail(fmt.Sprintf("playurl 返回 %d：%s", pu.Code, pu.Msg))
 		return
 	}
 	if len(pu.Data.Dash.Video) == 0 || len(pu.Data.Dash.Audio) == 0 {
-		j.State = "error"
-		j.Err = "拿不到 dash 流（可能要登录/Cookie）"
+		fail("拿不到 dash 流（可能要登录/Cookie）")
 		return
 	}
 
@@ -292,19 +305,18 @@ func startBili(j *Job) {
 		mu.Unlock()
 	}
 
-	if err := downloadTo(vURL, vPath, add); err != nil {
-		j.State = "error"
-		j.Err = "视频流下载失败：" + err.Error()
+	if err := downloadTo(ctx, vURL, vPath, add); err != nil {
+		fail("视频流下载失败：" + err.Error())
 		return
 	}
-	if err := downloadTo(aURL, aPath, add); err != nil {
-		j.State = "error"
-		j.Err = "音频流下载失败：" + err.Error()
+	if err := downloadTo(ctx, aURL, aPath, add); err != nil {
+		fail("音频流下载失败：" + err.Error())
 		return
 	}
 
+	appLog("bili id=%s 两路下完，开始合并", j.ID)
 	j.State = "merging"
-	if err := mergeAV(vPath, aPath, outPath); err != nil {
+	if err := mergeAV(ctx, vPath, aPath, outPath); err != nil {
 		j.Err = "合并失败（要 ffmpeg）：" + err.Error()
 		j.State = "error"
 		return
@@ -315,6 +327,7 @@ func startBili(j *Job) {
 	}
 	j.FilePath = outPath
 	j.State = "done"
+	appLog("bili id=%s 完成 %s", j.ID, outPath)
 	fmt.Printf("[B站] %s -> %s\n", bvid, outPath)
 }
 
@@ -367,8 +380,8 @@ func contentLength(url string) int64 {
 	return resp.ContentLength
 }
 
-func downloadTo(url, dst string, onChunk func(int64)) error {
-	req, err := http.NewRequest("GET", url, nil)
+func downloadTo(ctx context.Context, url, dst string, onChunk func(int64)) error {
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return err
 	}
@@ -389,6 +402,9 @@ func downloadTo(url, dst string, onChunk func(int64)) error {
 	defer f.Close()
 	buf := make([]byte, 256*1024)
 	for {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		n, err := resp.Body.Read(buf)
 		if n > 0 {
 			if _, werr := f.Write(buf[:n]); werr != nil {
@@ -405,7 +421,7 @@ func downloadTo(url, dst string, onChunk func(int64)) error {
 	}
 }
 
-func mergeAV(vPath, aPath, outPath string) error {
+func mergeAV(ctx context.Context, vPath, aPath, outPath string) error {
 	ff, err := exec.LookPath("ffmpeg")
 	if err != nil {
 		return fmt.Errorf("没找到 ffmpeg")

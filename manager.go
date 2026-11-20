@@ -147,6 +147,7 @@ func (m *Manager) AddHTTPEx(url, name, dir string, segN int, headers map[string]
 		Created: time.Now(),
 	}
 	j.ctx, j.cancel = context.WithCancel(context.Background())
+	appLog("add kind=%s id=%s name=%q segs=%d nogrow=%v url=%s", j.Kind, j.ID, name, segN, noGrow, url)
 	m.mu.Lock()
 	m.jobs[j.ID] = j
 	m.order = append(m.order, j.ID)
@@ -220,6 +221,7 @@ func (m *Manager) SetThreads(id string, segs int, noGrow bool) error {
 	j.SegN = segs
 	j.NoGrow = noGrow
 	j.mu.Unlock()
+	appLog("threads id=%s segs=%d nogrow=%v", id, segs, noGrow)
 
 	if noGrow {
 		atomic.StoreInt32(&j.desired, int32(segs))
@@ -240,6 +242,7 @@ func (m *Manager) Control(id, act string) error {
 	if j == nil {
 		return fmt.Errorf("没有这个任务")
 	}
+	appLog("control id=%s act=%s state=%s", id, act, j.State)
 	switch act {
 	case "pause", "cancel":
 		if j.cancel != nil {
@@ -254,10 +257,21 @@ func (m *Manager) Control(id, act string) error {
 		j.State = "queued"
 		j.Err = ""
 		go func() {
-			if j.Kind == "http" {
+			// 三种任务各走各的入口：以前只分 http / 其它，
+			// B 站和 yt-dlp 的 video 任务会被当成 BT 去下，暂停后根本恢复不了。
+			switch {
+			case j.Kind == "http":
 				startHTTP(j)
-			} else {
+			case j.Kind == "bt":
 				startBT(j)
+			case j.Kind == "video":
+				if IsBiliURL(j.Source) {
+					startBili(j)
+				} else {
+					startVideo(j)
+				}
+			default:
+				startHTTP(j)
 			}
 			m.save()
 		}()

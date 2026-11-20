@@ -256,6 +256,9 @@ func startHTTP(j *Job) {
 		j.State = s
 		j.Err = e
 		j.mu.Unlock()
+		if s != "downloading" || e != "" {
+			appLog("http id=%s %s %s", j.ID, s, e)
+		}
 	}
 	setState("downloading", "")
 
