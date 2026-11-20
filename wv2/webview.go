@@ -150,8 +150,10 @@ func NewWithOptions(options WebViewOptions) WebView {
 	if err != nil {
 		log.Fatal(err)
 	}
-	// disable context menu
-	err = settings.PutAreDefaultContextMenusEnabled(options.Debug)
+	// 右键菜单：复制/粘贴/全选是日常刚需（尤其顶部的链接输入框），
+	// 不能跟着 Debug 开关走 —— 原来写成 PutAreDefaultContextMenusEnabled(options.Debug)，
+	// 正式版 Debug=false，于是整个界面右键都没反应，连输入框里都粘不了。
+	err = settings.PutAreDefaultContextMenusEnabled(true)
 	if err != nil {
 		log.Fatal(err)
 	}
