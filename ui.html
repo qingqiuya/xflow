@@ -1010,11 +1010,11 @@ $('#torrentFile').onchange=async e=>{
 // 先把 WebView 的「拖文件 = 导航到 file://」默认行为彻底掐掉。
 // 不掐的话拖张图片进来，整个窗口就变成那张图片了（2026-11-21 清秋踩的）。
 // 用捕获阶段 + stopPropagation，比只在 document 冒泡阶段靠谱。
+// 只 preventDefault，不要 stopPropagation —— 拦了传播的话互传页那个拖放区
+// 自己也收不到 drop，就成了「拖进去没反应」。
 ['dragenter','dragover','dragleave','drop'].forEach(t=>{
-  document.addEventListener(t, e => { e.preventDefault(); e.stopPropagation(); }, true);
+  document.addEventListener(t, e => e.preventDefault(), true);
 });
-window.addEventListener('dragover', e => e.preventDefault(), true);
-window.addEventListener('drop', e => e.preventDefault(), true);
 
 // 拖一个 .torrent 到窗口里也认（只在下载页；互传页的拖放归互传自己管）
 
