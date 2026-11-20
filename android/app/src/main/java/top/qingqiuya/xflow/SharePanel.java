@@ -55,8 +55,10 @@ public class SharePanel {
 
     private LinearLayout devicesBox, inboxBox;
     private TextView targetText, status, selfTag;
-    private EditText addrInput;
     private String lastDevSig = "";
+    private String lastInboxSig = "";
+    private long lastInboxAt = 0;
+    private EditText addrInput;
 
     private final Activity act;
     private final View root;
@@ -203,6 +205,12 @@ public class SharePanel {
                 lastDevSig = sig.toString();
                 renderDevices(list);
             }
+            // 收件箱也要跟：不然停在这一页时收到新文件，列表还是「还没有收到的文件」
+            long now = System.currentTimeMillis();
+            if (now - lastInboxAt > 4000) {
+                lastInboxAt = now;
+                loadInbox();
+            }
             ui.postDelayed(tick[0], 1500);
         };
         ui.postDelayed(tick[0], 300);
@@ -293,7 +301,14 @@ public class SharePanel {
                 }
             } catch (Exception ignored) {
             }
-            ui.post(() -> renderInbox(items));
+            StringBuilder ig = new StringBuilder();
+            for (String[] a : items) ig.append(a[0]).append('|').append(a[1]).append(',');
+            final String inboxSig = ig.toString();
+            ui.post(() -> {
+                if (inboxSig.equals(lastInboxSig)) return;
+                lastInboxSig = inboxSig;
+                renderInbox(items);
+            });
         }).start();
     }
 
@@ -376,18 +391,14 @@ public class SharePanel {
             del.setTextSize(12.5f);
             del.setPadding(dp(10), dp(6), dp(4), dp(6));
             del.setOnClickListener(v -> {
-                new android.app.AlertDialog.Builder(act)
-                        .setTitle("删除文件")
-                        .setMessage(it[0] + "？删了就找不回来了。")
-                        .setPositiveButton("删除", (d, w) -> new Thread(() -> {
+                DarkDialog.confirm(act, "删除文件", it[0] + "\n删了就找不回来了。", "删除", () ->
+                        new Thread(() -> {
                             boolean ok = Transfer.delete(act, it[2]);
                             ui.post(() -> {
                                 say(ok ? ("已删除：" + it[0]) : "删不掉（可能被别的 App 占用或权限不足）");
                                 if (ok) loadInbox();
                             });
-                        }).start())
-                        .setNegativeButton("算了", null)
-                        .show();
+                        }).start());
             });
             row.addView(del);
             inboxBox.addView(row);
