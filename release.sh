@@ -30,9 +30,10 @@ git tag -f "v$VER"
 git push github HEAD && git push nas HEAD && git push -f github "v$VER"
 
 echo "== 4/5 gh release"
+# 不带 crx：浏览器从 2025 年起拒收商店外分发的 crx，放上去只会让人白下
 gh release create "v$VER" --title "$NOTES" --notes "$NOTES" \
   "dist/XFlow-Setup-$VER.exe" "dist/XFlow-portable-$VER.exe" \
-  "dist/xflow_${VER}_amd64.deb" "dist/xflow-ext-$VER.crx"
+  "dist/xflow_${VER}_amd64.deb"
 
 echo "== 5/5 镜像到 NAS"
 ~/bin/mirror-xflow-releases.sh "v$VER"
