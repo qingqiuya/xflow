@@ -709,6 +709,10 @@ func finishJob(j *Job, part, final string) {
 		j.mu.Unlock()
 		return
 	}
+	// 下完了，续传状态就没用了：删掉 part+ ".json"（多段下载的块记录）和它的临时文件。
+	// 以前漏了这一步，每个多段任务下完都在下载目录里多留一个 xxx.part.json。
+	_ = os.Remove(part + ".json")
+	_ = os.Remove(part + ".json.tmp")
 	// 名字里看不出类型（没扩展名）时，按文件头补一个 —— 不然下完是个没后缀的裸文件，
 	// Windows 双击不认识，人也不知道这是 iso 还是补丁包。
 	if filepath.Ext(final) == "" {
