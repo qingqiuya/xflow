@@ -61,6 +61,31 @@ public class SharePanel {
         return new java.util.ArrayList<>(targets.values());
     }
 
+    /** 本地备注名（只自己看得到）：ip:port -> 名字，存在 xflow_share 里。 */
+    private String aliasOf(Beacon.Peer p) {
+        String raw = sp.getString("peer_names", "");
+        String key = keyOf(p);
+        for (String line : raw.split("\n")) {
+            int e = line.indexOf('=');
+            if (e > 0 && line.substring(0, e).equals(key)) return line.substring(e + 1);
+        }
+        return "";
+    }
+
+    private void setAlias(Beacon.Peer p, String name) {
+        String key = keyOf(p);
+        StringBuilder sb = new StringBuilder();
+        String raw = sp.getString("peer_names", "");
+        for (String line : raw.split("\n")) {
+            if (line.trim().isEmpty()) continue;
+            int e = line.indexOf('=');
+            if (e > 0 && line.substring(0, e).equals(key)) continue;
+            sb.append(line).append("\n");
+        }
+        if (!name.isEmpty()) sb.append(key).append('=').append(name).append("\n");
+        sp.edit().putString("peer_names", sb.toString()).apply();
+    }
+
     private String pickedLabel() {
         int n = targets.size();
         if (n == 0) return "选择文件发送…";
@@ -222,7 +247,10 @@ public class SharePanel {
                 }
             }
             StringBuilder sig = new StringBuilder();
-            for (Beacon.Peer p : list) sig.append(p.ip).append(':').append(p.port).append(',');
+            // 带上显示名：不然改完名 sig 没变化，界面不重绘（改了看不到效果）
+            for (Beacon.Peer p : list) {
+                sig.append(p.ip).append(':').append(p.port).append('|').append(aliasOf(p)).append(',');
+            }
             if (!sig.toString().equals(lastDevSig)) {
                 lastDevSig = sig.toString();
                 renderDevices(list);
@@ -268,7 +296,8 @@ public class SharePanel {
             texts.setOrientation(LinearLayout.VERTICAL);
             texts.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
             TextView n = new TextView(act);
-            n.setText(p.name);
+            String note = aliasOf(p);
+            n.setText(note.isEmpty() ? p.name : note);
             n.setTextColor(Color.parseColor("#e8ebf2"));
             n.setTextSize(14f);
             TextView a = new TextView(act);
@@ -314,13 +343,11 @@ public class SharePanel {
                 renderDevices(list);
             });
             row.setOnLongClickListener(v -> {
-                if ("manual".equals(p.platform)) {
-                    manual.remove(p);
-                    saveManual();
-                    targets.remove(keyOf(p));
+                DarkDialog.input(act, "给这台改个名", "只自己看得到", aliasOf(p).isEmpty() ? p.name : aliasOf(p), val -> {
+                    setAlias(p, val);
                     refreshDevices();
-                    say("已移除手动设备");
-                }
+                    say(val.isEmpty() ? "已恢复原名" : ("已改名为 " + val));
+                });
                 return true;
             });
             devicesBox.addView(row);
