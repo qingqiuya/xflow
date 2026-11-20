@@ -452,6 +452,19 @@ func main() {
 		mgr.ClearDone()
 		json.NewEncoder(w).Encode(map[string]any{"ok": true})
 	})
+	// 打开下载目录（下载页空状态那个按钮用）
+	mux.HandleFunc("/api/opendir", func(w http.ResponseWriter, r *http.Request) {
+		p := r.URL.Query().Get("path")
+		if p == "" {
+			p = currentDir()
+		}
+		if err := exec.Command("explorer", p).Start(); err != nil {
+			json.NewEncoder(w).Encode(map[string]any{"ok": false, "err": err.Error()})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{"ok": true, "path": p})
+	})
+
 	mux.HandleFunc("/api/open", func(w http.ResponseWriter, r *http.Request) {
 		j := mgr.Get(r.URL.Query().Get("id"))
 		if j == nil {

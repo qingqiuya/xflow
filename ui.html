@@ -146,6 +146,12 @@ button:active{transform:scale(.97)}
 .pbar.on{display:block}
 .pbar i{display:block;height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,#5cc9ff,#3ddc84);transition:width .12s}
 .drop-foot{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:8px;min-height:18px;font-size:11.5px;color:#6b7488}
+.emptyrich{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:52px 20px;text-align:center}
+.emptyrich .er-ico{font-size:30px;color:var(--acc);opacity:.75;margin-bottom:10px}
+.emptyrich .er-t{font-size:15px;color:#c9d1e0;font-weight:600}
+.emptyrich .er-s{font-size:12.5px;color:#6b7488;line-height:1.8;margin-top:8px}
+.emptyrich .er-btns{display:flex;gap:10px;margin-top:16px}
+.emptyrich .er-tips{font-size:11.5px;color:#545e73;margin-top:16px}
 .inboxrow{display:flex;align-items:center;gap:9px;background:#141821;border:1px solid #2b3446;border-radius:9px;padding:8px 11px;margin-bottom:6px;font-size:12.5px}
 .inboxrow .ib-ico{flex:0 0 auto}
 .inboxrow .ib-nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -327,7 +333,7 @@ button:active{transform:scale(.97)}
 </div>
 <div class="pages">
   <div class="page on" id="pageDl">
-    <div class="list" id="list"><div class="empty"><b>⬇</b>还没有任务</div></div>
+    <div class="list" id="list"></div>
   </div>
   <div class="page" id="pageSh"></div>
 </div>
@@ -919,6 +925,36 @@ setInterval(shPollPending, 2000);
 // 哪些任务的线程面板是展开的（load 每秒重渲染，状态得放外面）
 const openThr = new Set();
 let thrDragging = false;
+// 空状态：别就一个「还没有任务」杵着，给点用得上的入口
+function emptyStateHTML(){
+  return `<div class="emptyrich">
+    <div class="er-ico">⬇</div>
+    <div class="er-t">还没有任务</div>
+    <div class="er-s">把链接粘到上面回车就行。装了浏览器插件的话，网页里点下载会直接转到这儿；<br>把 .torrent 拖进窗口也能加 BT 任务。</div>
+    <div class="er-btns">
+      <button class="primary sm" id="erPaste">粘贴剪贴板</button>
+      <button class="ghost" id="erDir">打开下载目录</button>
+    </div>
+    <div class="er-tips">直链 · 磁力 · BV 号 · .torrent · YouTube 这类视频站链接</div>
+  </div>`;
+}
+function bindEmptyState(){
+  const p = document.getElementById('erPaste');
+  if(p) p.onclick = async () => {
+    try {
+      const t = await navigator.clipboard.readText();
+      if(!t){ alert('剪贴板是空的'); return }
+      const u = document.getElementById('url');
+      u.value = t.trim();
+      u.focus();
+    } catch(e){ alert('读不到剪贴板（浏览器权限）：手动粘一下吧') }
+  };
+  const d = document.getElementById('erDir');
+  if(d) d.onclick = async () => {
+    try { await fetch('/api/opendir'); } catch(e){ alert('打不开：' + e.message) }
+  };
+}
+
 async function load(){
   if (thrDragging) return; // 正在拖滑块，别打断
   const d=await (await fetch('/api/jobs')).json();
@@ -926,7 +962,7 @@ async function load(){
   const st=js.filter(j=>j.state==='downloading').length;
   $('#stat').textContent=`共 ${js.length} 个任务`+(st?` · ${st} 个下载中`:'')+(dirShown?` · ${dirShown}`:'');
   const _jc=document.getElementById('jobCount'); if(_jc) _jc.textContent=js.length?js.length+' 个任务':'';
-  if(!js.length){$('#list').innerHTML='<div class="empty"><b>⬇</b>还没有任务，贴个链接开始吧</div>';return}
+  if(!js.length){$('#list').innerHTML=emptyStateHTML();bindEmptyState();return}
   $('#list').innerHTML=js.map(j=>{
     const pct=j.total>0?Math.min(100,j.done/j.total*100):0;
     const [bc,bt]=badge(j.state);

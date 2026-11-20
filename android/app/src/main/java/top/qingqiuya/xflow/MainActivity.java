@@ -340,7 +340,8 @@ public class MainActivity extends Activity {
     }
 
     /** 一行「标签 + 地址」，点一下复制地址本身。 */
-    private TextView addrChip(String label, String copy) {
+    /** 一整个可选择的行：长按就能用系统菜单复制，不靠程序写剪贴板。 */
+    private TextView selectableRow(String label, String copy) {
         TextView t = new TextView(this);
         t.setText(label);
         t.setTextColor(0xFF5CC9FF);
@@ -348,7 +349,7 @@ public class MainActivity extends Activity {
         t.setTypeface(android.graphics.Typeface.MONOSPACE);
         t.setBackgroundResource(R.drawable.chip_bg);
         t.setPadding(dp(10), dp(9), dp(10), dp(9));
-        t.setOnClickListener(v -> copyText(copy));
+        t.setTextIsSelectable(true);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         lp.bottomMargin = dp(6);
@@ -425,10 +426,10 @@ public class MainActivity extends Activity {
         state.setPadding(0, dp(4), 0, dp(12));
         box.addView(state);
 
-        // IPv4 / IPv6 分开列，各自点一下就复制纯 IP
-        // （纯 IP 粘到互传页的「手动加地址」里就能直接发，端口默认 17777）
-        if (!ip.isEmpty()) box.addView(addrChip("IPv4  " + ip, guessIpv4(ip)));
-        if (!ip6.isEmpty()) box.addView(addrChip("IPv6  [" + ip6 + "]", ip6));
+        // 就两行：IPv4:令牌、IPv6:令牌。整行可以长按选中复制（程序写剪贴板在 MIUI 上
+        // 经常写不进去，让用户自己选更靠谱）。
+        if (!ip.isEmpty()) box.addView(selectableRow("IPv4  " + ip + ":" + tok, ip + ":" + tok));
+        if (!ip6.isEmpty()) box.addView(selectableRow("IPv6  " + ip6 + ":" + tok, ip6 + ":" + tok));
 
         TextView body = new TextView(this);
         body.setTextColor(0xFFC9D2E3);
@@ -436,45 +437,6 @@ public class MainActivity extends Activity {
         body.setTypeface(android.graphics.Typeface.MONOSPACE);
         body.setTextIsSelectable(true);
         body.setPadding(0, dp(14), 0, dp(6));
-        // 一整串：ip:令牌（长按可选中复制，不依赖程序写剪贴板 —— MIUI 会拦）
-        TextView allRow = new TextView(this);
-        allRow.setText(ip + ":" + tok);
-        allRow.setTextColor(0xFF3DDC84);
-        allRow.setTextSize(14f);
-        allRow.setTypeface(android.content.res.Resources.getSystem() == null
-                ? null : android.graphics.Typeface.MONOSPACE);
-        allRow.setBackgroundResource(R.drawable.chip_bg);
-        allRow.setPadding(dp(10), dp(9), dp(10), dp(9));
-        allRow.setTextIsSelectable(true);
-        LinearLayout.LayoutParams alp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        alp.topMargin = dp(6);
-        alp.bottomMargin = dp(6);
-        allRow.setLayoutParams(alp);
-        box.addView(allRow);
-
-        TextView allTip = new TextView(this);
-        allTip.setText("↑ 长按选中上面这串（ip:令牌），复制后粘到桌面「手动加地址」就能发；只粘 IP 也行。");
-        allTip.setTextColor(0xFF8B93A7);
-        allTip.setTextSize(11f);
-        allTip.setPadding(0, 0, 0, dp(8));
-        box.addView(allTip);
-
-        TextView tokRow = new TextView(this);
-        tokRow.setText("令牌  " + tok + "  （点一下复制）");
-        tokRow.setTextColor(0xFF7FD4FF);
-        tokRow.setTextSize(12.5f);
-        tokRow.setTypeface(android.graphics.Typeface.MONOSPACE);
-        tokRow.setBackgroundResource(R.drawable.chip_bg);
-        tokRow.setPadding(dp(10), dp(9), dp(10), dp(9));
-        LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        tlp.topMargin = dp(6);
-        tlp.bottomMargin = dp(6);
-        tokRow.setLayoutParams(tlp);
-        tokRow.setOnClickListener(v -> copyText(tok));
-        box.addView(tokRow);
-
         body.setText(
                 "令牌（每个请求都要带）\n  " + tok + "\n\n" +
                 "GET  /api/version\n" +
