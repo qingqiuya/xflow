@@ -348,17 +348,43 @@ public class MainActivity extends Activity {
         t.setTypeface(android.graphics.Typeface.MONOSPACE);
         t.setBackgroundResource(R.drawable.chip_bg);
         t.setPadding(dp(10), dp(9), dp(10), dp(9));
-        t.setOnClickListener(v -> {
-            android.content.ClipboardManager cm =
-                    (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
-            cm.setPrimaryClip(android.content.ClipData.newPlainText("XFlow", copy));
-            Toast.makeText(this, "已复制 " + copy + "（粘到「手动加地址」就能发）", Toast.LENGTH_SHORT).show();
-        });
+        t.setOnClickListener(v -> copyText(copy));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         lp.bottomMargin = dp(6);
         t.setLayoutParams(lp);
         return t;
+    }
+
+    /** 复制一段文本到剪贴板，写完读回来验证 —— MIUI 有时候会静默吞掉。 */
+    private void copyText(String text) {
+        try {
+            android.content.ClipboardManager cm =
+                    (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+            if (cm == null) {
+                Toast.makeText(this, "系统没给剪贴板服务", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            cm.setPrimaryClip(android.content.ClipData.newPlainText("XFlow", text));
+            String back = "";
+            try {
+                android.content.ClipData cp = cm.getPrimaryClip();
+                if (cp != null && cp.getItemCount() > 0) {
+                    back = String.valueOf(cp.getItemAt(0).coerceToText(this));
+                }
+            } catch (Exception ignored) {
+            }
+            if (back.isEmpty()) {
+                // Android 12+ 有的系统版本不允许读回，只能明说「已写入，若粘出来不对再点一次」
+                Toast.makeText(this, "已写入剪贴板：" + text, Toast.LENGTH_SHORT).show();
+            } else if (back.equals(text)) {
+                Toast.makeText(this, "已复制 " + text, Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(this, "复制没成功（剪贴板里是别的）", Toast.LENGTH_SHORT).show();
+            }
+        } catch (Exception e) {
+            Toast.makeText(this, "复制失败：" + e.getMessage(), Toast.LENGTH_SHORT).show();
+        }
     }
 
     /** 从 http://10.11.11.100:17777 里抠出 10.11.11.100 */
@@ -410,6 +436,36 @@ public class MainActivity extends Activity {
         body.setTypeface(android.graphics.Typeface.MONOSPACE);
         body.setTextIsSelectable(true);
         body.setPadding(0, dp(14), 0, dp(6));
+        TextView allRow = new TextView(this);
+        allRow.setText("地址+令牌  " + ip + ":" + port + "?token=" + tok + "  （点一下复制，粘到桌面「手动加地址」直接能发）");
+        allRow.setTextColor(0xFF3DDC84);
+        allRow.setTextSize(12f);
+        allRow.setTypeface(android.graphics.Typeface.MONOSPACE);
+        allRow.setBackgroundResource(R.drawable.chip_bg);
+        allRow.setPadding(dp(10), dp(9), dp(10), dp(9));
+        LinearLayout.LayoutParams alp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        alp.topMargin = dp(6);
+        alp.bottomMargin = dp(6);
+        allRow.setLayoutParams(alp);
+        allRow.setOnClickListener(v -> copyText(ip + ":" + port + "?token=" + tok));
+        box.addView(allRow);
+
+        TextView tokRow = new TextView(this);
+        tokRow.setText("令牌  " + tok + "  （点一下复制）");
+        tokRow.setTextColor(0xFF7FD4FF);
+        tokRow.setTextSize(12.5f);
+        tokRow.setTypeface(android.graphics.Typeface.MONOSPACE);
+        tokRow.setBackgroundResource(R.drawable.chip_bg);
+        tokRow.setPadding(dp(10), dp(9), dp(10), dp(9));
+        LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        tlp.topMargin = dp(6);
+        tlp.bottomMargin = dp(6);
+        tokRow.setLayoutParams(tlp);
+        tokRow.setOnClickListener(v -> copyText(tok));
+        box.addView(tokRow);
+
         body.setText(
                 "令牌（每个请求都要带）\n  " + tok + "\n\n" +
                 "GET  /api/version\n" +

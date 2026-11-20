@@ -361,12 +361,18 @@ document.getElementById('shAddrToggle').onclick = () => {
   if(r.style.display==='flex') document.getElementById('shAddr').focus();
 };
 document.getElementById('shAddrAdd').onclick = () => {
-  const v = document.getElementById('shAddr').value.trim();
+  let v = document.getElementById('shAddr').value.trim();
   if(!v) return;
+  // 支持手机那边一键复制的整串：ip:port?token=xxxx（IP、端口、令牌一次粘完）
+  let tok = '';
+  const qi = v.indexOf('?token=');
+  if (qi >= 0) { tok = v.slice(qi + 7).trim(); v = v.slice(0, qi).trim(); }
   const m = v.match(/^\[?([^\]]+)\]?:(\d+)$/);
   let ip = v, port = 17777;
   if (m) { ip = m[1]; port = parseInt(m[2], 10); }
-  else if (!v.includes(':')) { return alert('写成 ip:端口 或 [v6]:端口'); }
+  else if (/^\[?[^\]]+\]?$/.test(v)) { ip = v.replace(/^\[|\]$/g, ''); }
+  else { return alert('写成 10.11.11.100 或 10.11.11.100:17777 或 10.11.11.100:17777?token=xxx'); }
+  if (tok) shSaveTok(ip, tok);
   const list = shManual();
   list.push({ip, port});
   const uniq = list.filter((x,i)=>list.findIndex(y=>y.ip===x.ip&&y.port===x.port)===i);
