@@ -91,6 +91,8 @@ public class MainActivity extends Activity {
         // 广播常开：只告诉别人「我在这、叫什么、HTTP 端口多少」，
         // 不加任务不动数据，所以不用等用户点开关
         beacon.start(ApiServer.DEFAULT_PORT);
+        // 互传保活：起一个前台服务，免得后台被系统冻结、端口失效
+        ShareKeepAlive.start(this);
         // LocalSend v2 兼容层（53317）：装了 LocalSend 的设备能直接发文件给这台手机。
         // 端口感 53317 被真 LocalSend 占了就自己安静退出（见 LocalSendServer.start）。
         try {
@@ -105,6 +107,10 @@ public class MainActivity extends Activity {
         api.setShareEnabled(shareOn);
         paintShareChip(shareChip, shareOn);
         applyShareTab(shareOn);
+        // 互传开着就把 ApiServer 也拉起来：互传走的是 17777 那套接口，
+        // 以前要用户单独点一下「API 开」，不点就从外面连不上（2026-11-21 修的）
+        if (shareOn && !api.isRunning()) api.start(ApiServer.DEFAULT_PORT);
+
         if (shareChip != null) {
             shareChip.setOnClickListener(v -> {
                 boolean now = !prefs.getBoolean("share_enabled", true);
@@ -112,6 +118,12 @@ public class MainActivity extends Activity {
                 api.setShareEnabled(now);
                 paintShareChip(shareChip, now);
                 applyShareTab(now);
+                if (now) {
+                    if (!api.isRunning()) api.start(ApiServer.DEFAULT_PORT);
+                    ShareKeepAlive.start(this);
+                } else {
+                    ShareKeepAlive.stop(this);
+                }
                 Toast.makeText(this, now ? "互传已开启" : "互传已关闭（别人传不进来）",
                         Toast.LENGTH_SHORT).show();
                 if (!now) animateToPage(0);
