@@ -172,6 +172,20 @@ func main() {
 				json.NewEncoder(w).Encode(map[string]any{"ok": true, "id": j.ID})
 				return
 			}
+			// 界面「添加」按钮走这个入口：BV 号 / 视频站也得走原生解析，
+			// 否则会被当成普通直链，报 unsupported protocol scheme。
+			if IsBiliURL(src) {
+				j := mgr.AddBili(src, d.Name, target)
+				ensureWindow()
+				json.NewEncoder(w).Encode(map[string]any{"ok": true, "id": j.ID, "kind": "video"})
+				return
+			}
+			if IsVideoURL(src) {
+				j := mgr.AddVideo(src, d.Name, target)
+				ensureWindow()
+				json.NewEncoder(w).Encode(map[string]any{"ok": true, "id": j.ID, "kind": "video"})
+				return
+			}
 			j, err := mgr.AddHTTPWithHeaders(src, orDefault(d.Name, fileNameFromURL(src)), target, d.Segs, nil)
 			if err != nil {
 				json.NewEncoder(w).Encode(map[string]any{"ok": false, "err": err.Error()})
