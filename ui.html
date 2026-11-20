@@ -162,6 +162,7 @@ button:active{transform:scale(.97)}
     <img src="/icon.png" class="brandico" alt=""><b>XFlow</b><span>汐流 · 把文件带下来</span>
     <div class="tabs"><a id="tabDl" class="on">下载</a><a id="tabSh">互传</a></div>
         <span class="grow" style="flex:1"></span>
+    <button class="ghost" id="extBtn" title="把浏览器下载交给汐流（装一次就行）" style="flex:0 0 auto;margin-right:8px;font-size:12px;padding:5px 10px">安装浏览器插件</button>
     <span id="ver" class="ver"></span>
   </div>
   <div class="addrow">
@@ -762,6 +763,36 @@ $('#list').addEventListener('change',async e=>{
 document.addEventListener('pointerup',()=>{setTimeout(()=>{thrDragging=false},400)});
 
 $('#url').addEventListener('keydown',e=>{if(e.key==='Enter')$('#add').click()});
+// 安装浏览器插件：引导页（目录路径 + 帮他打开目录和扩展页）
+$('#extBtn').onclick = async () => {
+  $('#extMask').classList.add('on');
+  $('#extMsg').textContent = '';
+  try {
+    const r = await (await fetch('/api/installext?open=0')).json();
+    $('#extDir').textContent = r.dir || '没找到 ext 目录，可能装的时候被删了';
+  } catch (e) { $('#extDir').textContent = '读取失败：' + e.message; }
+};
+$('#extClose').onclick = () => $('#extMask').classList.remove('on');
+$('#extMask').onclick = (e) => { if (e.target === $('#extMask')) $('#extMask').classList.remove('on'); };
+$('#extCopy').onclick = async () => {
+  try {
+    await navigator.clipboard.writeText($('#extDir').textContent);
+    $('#extCopy').textContent = '已复制';
+    setTimeout(() => { $('#extCopy').textContent = '复制'; }, 1500);
+  } catch (e) { $('#extMsg').textContent = '复制失败，手动选中路径复制吧'; }
+};
+$('#extGo').onclick = async () => {
+  $('#extMsg').textContent = '';
+  try {
+    const r = await (await fetch('/api/installext')).json();
+    if (!r.ok) { $('#extMsg').textContent = '没找到插件目录，建议重装汐流'; return; }
+    $('#extMsg').style.color = 'var(--ok)';
+    $('#extMsg').textContent = r.browser
+      ? '已打开目录，并打开了 ' + r.browser + ' —— 按上面三步点一下'
+      : '已打开目录。没找到 Edge/Chrome，手动打开浏览器输入 chrome://extensions 或 edge://extensions';
+    setTimeout(() => { $('#extMsg').style.color = 'var(--warn)'; }, 4000);
+  } catch (e) { $('#extMsg').textContent = '调不起来：' + e.message; }
+};
 {const ns=localStorage.getItem('xflow-segs');if(ns&&$('#segs'))$('#segs').value=ns;
  const ag=localStorage.getItem('xflow-autogrow');if(ag!==null&&$('#autogrow'))$('#autogrow').checked=(ag==='1');
  const syncGrow=()=>{if($('#segs'))$('#segs').disabled=$('#autogrow').checked;
@@ -1013,4 +1044,26 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 });
 </script>
+<div class="mask" id="extMask">
+  <div class="dlg" style="width:640px">
+    <div class="dlg-hd">装浏览器接管插件</div>
+    <div style="padding:16px 20px 18px;overflow:auto;font-size:13px;line-height:1.8;color:#c9d1e0">
+      <div style="color:#8b93a7;margin-bottom:12px">装上它，浏览器里点下载不会自己下，链接直接交给汐流：多线程、断点续传、BT 都能用。不装也能用，只是每次得手动把链接粘进来。</div>
+      <div style="display:flex;gap:10px;margin-bottom:10px"><b style="flex:0 0 20px;color:var(--acc)">1</b><span>点下面那个按钮，会帮你把<b>插件目录</b>和<b>浏览器扩展页</b>都打开</span></div>
+      <div style="display:flex;gap:10px;margin-bottom:10px"><b style="flex:0 0 20px;color:var(--acc)">2</b><span>在扩展页打开「<b>开发者模式</b>」（Edge 在左下角，Chrome 在右上角）</span></div>
+      <div style="display:flex;gap:10px;margin-bottom:12px"><b style="flex:0 0 20px;color:var(--acc)">3</b><span>点「<b>加载已解压的扩展程序</b>」，选中下面这个目录</span></div>
+      <div style="display:flex;gap:8px;align-items:center;background:#0f121a;border:1px solid var(--line);border-radius:9px;padding:9px 11px;margin-bottom:12px">
+        <code id="extDir" style="flex:1;font-size:12px;word-break:break-all;color:#9fb3d1">读取中…</code>
+        <button class="ghost" id="extCopy" style="flex:0 0 auto;padding:4px 10px">复制</button>
+      </div>
+      <div style="font-size:11.5px;color:#6b7488;line-height:1.7">为什么不能一键装：浏览器从 2025 年起不接受商店外分发的 crx，也不允许软件用注册表静默装扩展（会被判「不受信任」并停用）。所以最后点那一下只能你自己来。<br>装好后地址栏右边会出现汐流图标，点开显示「已连接」就对了。</div>
+      <div id="extMsg" style="font-size:12px;color:var(--warn);margin-top:10px;min-height:16px"></div>
+    </div>
+    <div class="dlg-ft">
+      <span class="grow"></span>
+      <button class="primary" id="extGo">打开目录和扩展页</button>
+      <button class="ghost" id="extClose">关闭</button>
+    </div>
+  </div>
+</div>
 </body></html>
