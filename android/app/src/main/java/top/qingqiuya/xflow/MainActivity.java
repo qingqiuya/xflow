@@ -105,7 +105,8 @@ public class MainActivity extends Activity {
         final TextView shareChip = findViewById(R.id.shareChip);
         boolean shareOn = prefs.getBoolean("share_enabled", true);
         api.setShareEnabled(shareOn);
-        paintShareChip(shareChip, shareOn);
+        final int[] mode = {shareMode()};
+        paintShareChip(shareChip, mode[0]);
         applyShareTab(shareOn);
         // 互传和 API 解耦：服务由「互传」负责拉起，API 开关只决定
         // 外部能不能调控制接口（/api/jobs、/api/add 这些）。
@@ -114,20 +115,10 @@ public class MainActivity extends Activity {
 
         if (shareChip != null) {
             shareChip.setOnClickListener(v -> {
-                boolean now = !prefs.getBoolean("share_enabled", true);
-                prefs.edit().putBoolean("share_enabled", now).apply();
-                api.setShareEnabled(now);
-                paintShareChip(shareChip, now);
-                applyShareTab(now);
-                if (now) {
-                    if (!api.isRunning()) api.start(ApiServer.DEFAULT_PORT);
-                    ShareKeepAlive.start(this);
-                } else if (!api.isApiEnabled()) {
-                    ShareKeepAlive.stop(this);
-                }
-                Toast.makeText(this, now ? "互传已开启" : "互传已关闭（别人传不进来）",
-                        Toast.LENGTH_SHORT).show();
-                if (!now) animateToPage(0);
+                // 三态循环：关 → 手动确认 → 自动接收 → 关
+                int next = (mode[0] + 1) % 3;
+                mode[0] = next;
+                applyShareMode(next, shareChip);
             });
         }
 
@@ -1238,10 +1229,37 @@ public class MainActivity extends Activity {
     }
 
     /** 互传 chip 的开/关配色，跟 API chip 一套。 */
-    private void paintShareChip(TextView chip, boolean on) {
+    /** 0=关 1=手动确认 2=自动接收（从偏好里读） */
+    private int shareMode() {
+        android.content.SharedPreferences p = getSharedPreferences("xflow", MODE_PRIVATE);
+        if (!p.getBoolean("share_enabled", true)) return 0;
+        return getSharedPreferences("xflow_share", MODE_PRIVATE).getBoolean("auto_accept", true) ? 2 : 1;
+    }
+
+    private void applyShareMode(int mode, TextView chip) {
+        getSharedPreferences("xflow", MODE_PRIVATE).edit()
+                .putBoolean("share_enabled", mode > 0).apply();
+        getSharedPreferences("xflow_share", MODE_PRIVATE).edit()
+                .putBoolean("auto_accept", mode == 2).apply();
+        api.setShareEnabled(mode > 0);
+        paintShareChip(chip, mode);
+        applyShareTab(mode > 0);
+        if (mode > 0) {
+            if (!api.isRunning()) api.start(ApiServer.DEFAULT_PORT);
+            ShareKeepAlive.start(this);
+        } else if (!api.isApiEnabled()) {
+            ShareKeepAlive.stop(this);
+        }
+        Toast.makeText(this, mode == 0 ? "互传已关闭（别人传不进来）"
+                : mode == 1 ? "互传：每笔都要你点接收" : "互传：自动接收",
+                Toast.LENGTH_SHORT).show();
+        if (mode == 0) animateToPage(0);
+    }
+
+    private void paintShareChip(TextView chip, int mode) {
         if (chip == null) return;
-        chip.setText(on ? "互传开" : "互传");
-        chip.setTextColor(on ? 0xFF3ddc84 : 0xFF5b6478);
+        chip.setText(mode == 0 ? "互传关" : mode == 1 ? "手动收" : "自动收");
+        chip.setTextColor(mode == 0 ? 0xFF5b6478 : mode == 1 ? 0xFFf0a020 : 0xFF3ddc84);
     }
 
     /** 关掉互传时把互传页签藏起来。 */
