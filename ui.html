@@ -459,8 +459,11 @@ function renderDevCards(){
       +'<div class="di">'+esc(p.ip)+'</div></div>'
       +'<span class="pick">取消</span></div>';
   }).join('');
-  if(lsPeers.length){
-    box.innerHTML += lsPeers.map((p,i)=>{
+  // 同一台机器可能同时被 mDNS 和 LocalSend 组播发现（手机就这样），
+  // IP 已经在上面列表里的就别再画一遍
+  const lsOnly = lsPeers.filter(p => !shPeers.some(q => q.ip === p.IP));
+  if(lsOnly.length){
+    box.innerHTML += lsOnly.map((p,i)=>{
       const nm = shortDevName(p.Device && p.Device.alias, p.IP);
       return '<div class="devcard ls" data-ls="'+i+'" title="LocalSend 设备：'+esc(nm)+' · '+esc(p.IP)+'">'
         +'<span class="av">🛰️</span>'
@@ -484,12 +487,12 @@ function renderDevCards(){
   });
   box.querySelectorAll('.devcard[data-ls]').forEach(el=>{
     el.onclick=()=>{
-      const p=lsPeers[parseInt(el.dataset.ls,10)];
+      const p=lsOnly[parseInt(el.dataset.ls,10)];
       if(!p) return;
       alert('这是 LocalSend 设备（'+p.IP+'）。\n\n汐流已经能和它互传文件了，但发送要拿本机文件路径，\n浏览器拖进来的文件给不出路径 —— 这块下一步补。\n\n现在可以先让它把文件发过来。');
     };
   });
-  document.getElementById('devTip').textContent=(shPeers.length+lsPeers.length)+' 台在线';
+  document.getElementById('devTip').textContent=(shPeers.length+lsOnly.length)+' 台在线';
 }
 function pickSharePeer(i){
   const p=shPeers[i]; if(!p) return;
