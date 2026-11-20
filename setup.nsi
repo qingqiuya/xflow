@@ -1,6 +1,6 @@
 Unicode true
 !define APPNAME "XFlow"
-!define APPVERSION "1.6.40"
+!define APPVERSION "1.6.41"
 !define PUBLISHER "qingqiuya"
 !define APPEXE "XFlow.exe"
 
@@ -58,12 +58,12 @@ Section "Install"
   SetOutPath "$INSTDIR"
   File "XFlow.exe"
   File "app.ico"
-  ; 浏览器接管插件：解压目录（"加载已解压的扩展程序"用）+ crx（拖进扩展页一步装完）
-  ; 为什么不能全自动装进浏览器：Chromium 从 2025 起把非商店的静默安装（注册表
-  ; 外部扩展、force-list）都判成"不受信任"并停用，除非走企业策略。所以这里
-  ; 把两种装法拉满，剩下那一步（点"添加扩展程序"）只能用户自己点。
+  ; 浏览器接管插件：只装解压目录 + 一个安装助手脚本。
+  ; 为什么不带 crx、也不自动装：Chromium 从 2025 起不接受商店外的 crx（拖进去
+  ; 直接拒），注册表外部扩展/force-list 也会被判"不受信任"停用。所以能做的
+  ; 就是把这些文件摊在用户面前、把扩展页给他打开，最后那一下必须他自己点。
   File /r "ext"
-  File /oname=xflow-ext.crx "dist\xflow-ext-${APPVERSION}.crx"
+  File "扩展安装助手.cmd"
   File "浏览器插件-安装说明.txt"
   ; 许可：MIT + 第三方组件全量原文（MPL/Apache/BSD 的分发义务）
   File "LICENSE"
@@ -74,6 +74,7 @@ Section "Install"
   CreateShortCut "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk" "$INSTDIR\${APPEXE}" "" "$INSTDIR\app.ico" 0
   CreateShortCut "$DESKTOP\${APPNAME}.lnk" "$INSTDIR\${APPEXE}" "" "$INSTDIR\app.ico" 0
 
+  CreateShortCut "$SMPROGRAMS\${APPNAME}\装浏览器接管扩展.lnk" "$INSTDIR\扩展安装助手.cmd" "" "" 0
   CreateShortCut "$SMPROGRAMS\${APPNAME}\浏览器插件安装说明.lnk" "$INSTDIR\浏览器插件-安装说明.txt"
 
   WriteUninstaller "$INSTDIR\Uninstall.exe"
@@ -109,13 +110,14 @@ Section "Uninstall"
   Delete "$INSTDIR\XFlow.exe"
   Delete "$INSTDIR\app.ico"
   Delete "$INSTDIR\浏览器插件-安装说明.txt"
-  Delete "$INSTDIR\xflow-ext.crx"
+  Delete "$INSTDIR\扩展安装助手.cmd"
   Delete "$INSTDIR\LICENSE"
   Delete "$INSTDIR\THIRD_PARTY_LICENSES.md"
   RMDir /r "$INSTDIR\licenses"
   RMDir /r "$INSTDIR\ext"
   Delete "$INSTDIR\Uninstall.exe"
   RMDir "$INSTDIR"
+  Delete "$SMPROGRAMS\${APPNAME}\装浏览器接管扩展.lnk"
   Delete "$SMPROGRAMS\${APPNAME}\浏览器插件安装说明.lnk"
   Delete "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk"
   Delete "$SMPROGRAMS\${APPNAME}\卸载 ${APPNAME}.lnk"
