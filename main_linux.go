@@ -151,7 +151,8 @@ func main() {
 				Source string `json:"source"`
 				Name   string `json:"name"`
 				Dir    string `json:"dir"`
-				Segs   int    `json:"segs"`
+				Segs   int    `json:"segs"`   // 1=单线程 2..32=固定 0=自动
+				NoGrow bool   `json:"nogrow"` // 不自动加线程
 			}
 			if err := json.NewDecoder(r.Body).Decode(&d); err != nil {
 				json.NewEncoder(w).Encode(map[string]any{"ok": false, "err": "请求体不是合法 JSON"})
@@ -214,7 +215,8 @@ func main() {
 			Referer string `json:"referer"`
 			Cookie  string `json:"cookie"`
 			Segs    int    `json:"segs"`
-			Single  bool   `json:"single"` // 强制单连接（插件接管小文件时用）
+			Single  bool   `json:"single"` // 兼容旧插件：等价 segs=1
+			NoGrow  bool   `json:"nogrow"` // 固定并发，不自动加线程
 		}
 		if err := json.NewDecoder(r.Body).Decode(&d); err != nil {
 			json.NewEncoder(w).Encode(map[string]any{"ok": false, "err": "请求体不是合法 JSON"})
@@ -258,7 +260,11 @@ func main() {
 		if d.Cookie != "" {
 			h["Cookie"] = d.Cookie
 		}
-		j, err := mgr.AddHTTPEx(src, name, dir, d.Segs, h, d.Single)
+		if d.Single {
+			d.Segs = 1
+			d.NoGrow = true
+		}
+		j, err := mgr.AddHTTPEx(src, name, dir, d.Segs, h, d.NoGrow)
 		if err != nil {
 			json.NewEncoder(w).Encode(map[string]any{"ok": false, "err": err.Error()})
 			return

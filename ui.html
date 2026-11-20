@@ -162,6 +162,14 @@ button:active{transform:scale(.97)}
   <div class="addrow">
     <input id="url" placeholder="粘贴链接 / 磁力 / BV 号…">
     <input id="name" placeholder="文件名（可留空）" style="flex:0 0 130px;font-size:12.5px">
+    <select id="seg" title="连接数：自动增长 / 固定 N / 单线程" style="flex:0 0 104px;font-size:12.5px;padding:9px 6px">
+      <option value="auto">自动线程</option>
+      <option value="1">单线程</option>
+      <option value="4">4 线程</option>
+      <option value="8">8 线程</option>
+      <option value="16">16 线程</option>
+      <option value="32">32 线程</option>
+    </select>
     <button class="primary" id="add">开始下载</button>
   </div>
   <div class="dltools" id="dlTools">
@@ -714,11 +722,19 @@ $('#add').onclick=async()=>{
   const src=$('#url').value.trim();
   if(!src){$('#url').focus();return}
   $('#add').disabled=true;
+  // 线程模式：auto=8 起自适应增长；1=单线程（直读整个响应）；N=固定 N 不增长
+  const sel=$('#seg').value;
+  let segs=8,nogrow=false;
+  if(sel==='auto'){segs=8;nogrow=false}
+  else if(sel==='1'){segs=1;nogrow=true}
+  else {segs=Number(sel);nogrow=true}
+  localStorage.setItem('xflow-seg',sel);
   await fetch('/api/jobs',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({source:src,name:$('#name').value.trim(),segs:8})});
+    body:JSON.stringify({source:src,name:$('#name').value.trim(),segs,nogrow})});
   $('#url').value='';$('#name').value='';$('#add').disabled=false;load();
 };
 $('#url').addEventListener('keydown',e=>{if(e.key==='Enter')$('#add').click()});
+{const s=localStorage.getItem('xflow-seg');if(s&&$('#seg'))$('#seg').value=s;}
 $('#torrentBtn').onclick=()=>$('#torrentFile').click();
 $('#torrentFile').onchange=async e=>{
   const f=e.target.files&&e.target.files[0];

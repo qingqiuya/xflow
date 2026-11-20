@@ -13,8 +13,9 @@ const DEFAULTS = {
   port: 17777,
   notify: true,
   segs: 16,
+  mode: "auto", // auto=自动增长；1=单线程；N=固定 N 不增长
   minMB: 0.25, // 小于这个尺寸不接管，交回浏览器（256KB 以下建任务的开销大于下载）
-  singleUnder: 1, // 小于这个尺寸（MB）让下载器走单连接，不分段不增长
+  singleUnder: 1, // 小于这个尺寸（MB）不论模式都走单连接
   pauseUntil: 0, // 暂停接管：0=没暂停；>0=到那个时间点；-1=一直暂停到手动恢复
 };
 const MENU_ID = "xflow-download-link";
@@ -104,17 +105,32 @@ function launchApp(url, name) {
 }
 
 // 推任务给 XFlow；失败抛错，调用方据此决定是否取消浏览器下载
-// size > 0 时自带 single 判断：小文件强制单连接
+// 线程模式：auto → 8 起自适应增长；1 → 单线程（直读整个响应）；N → 固定 N 不增长
 async function push(url, name, referer, cookie, dir, size) {
-  const single = size > 0 && size < C.singleUnder * 1024 * 1024;
+  const mode = String(C.mode || "auto");
+  let segs = 8;
+  let nogrow = false;
+  if (mode === "auto") {
+    segs = 8;
+    nogrow = false;
+  } else {
+    const n = parseInt(mode, 10);
+    segs = n > 0 ? n : 8;
+    nogrow = true;
+  }
+  // 小文件不值得分段：建连接的开销比下载本身还大
+  if (size > 0 && size < C.singleUnder * 1024 * 1024) {
+    segs = 1;
+    nogrow = true;
+  }
   const body = JSON.stringify({
     url,
     name: name || "",
     referer: referer || "",
     cookie: cookie || "",
     dir: dir || "",
-    segs: C.segs,
-    single,
+    segs,
+    nogrow,
   });
   let r;
   try {

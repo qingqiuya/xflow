@@ -322,8 +322,8 @@ func startHTTP(j *Job) {
 		return
 	}
 
-	if !supportRange || size <= 0 || j.Single {
-		// 单流（j.Single 是插件对小文件指定的强制单连接）
+	if !supportRange || size <= 0 || j.SegN == 1 {
+		// 单流：服务器不支持 Range、大小未知，或用户/插件指定了单线程
 		f.Truncate(0)
 		var done int64
 		j.mu.Lock()
@@ -564,58 +564,60 @@ func startHTTP(j *Job) {
 	//
 	// 之前写的是「等速度自己涨了才加」，但速度只有加了线程才会涨——
 	// 判断方向反了，实测 workers 恒等于起始值，等于没自适应（2026-11-10 修）。
-	go func() {
-		t := time.NewTicker(3 * time.Second)
-		defer t.Stop()
-		var prev, prevDelta int64
-		var probing int32 // 上一轮加了多少个
-		stall := 0
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-t.C:
-				cur := atomic.LoadInt64(&total)
-				delta := cur - prev
-				prev = cur
-				if cur >= size {
+	if !j.NoGrow {
+		go func() {
+			t := time.NewTicker(3 * time.Second)
+			defer t.Stop()
+			var prev, prevDelta int64
+			var probing int32 // 上一轮加了多少个
+			stall := 0
+			for {
+				select {
+				case <-ctx.Done():
 					return
-				}
-				a := atomic.LoadInt32(&active)
-				if a >= maxWorkers {
-					return
-				}
-
-				if probing > 0 {
-					// 上一轮加过线程：看效果
-					grown := prevDelta > 0 && float64(delta) > float64(prevDelta)*1.05
-					if !grown {
-						stall++
-						if stall >= 2 {
-							return // 连着两轮加了没效果，停下
-						}
-						prevDelta = delta
-						probing = 0
-						continue
+				case <-t.C:
+					cur := atomic.LoadInt64(&total)
+					delta := cur - prev
+					prev = cur
+					if cur >= size {
+						return
 					}
-					stall = 0
-				}
+					a := atomic.LoadInt32(&active)
+					if a >= maxWorkers {
+						return
+					}
 
-				// 试探性加一批：不低于 2 个，最多加到上限
-				add := probing
-				if add < 2 {
-					add = 2
+					if probing > 0 {
+						// 上一轮加过线程：看效果
+						grown := prevDelta > 0 && float64(delta) > float64(prevDelta)*1.05
+						if !grown {
+							stall++
+							if stall >= 2 {
+								return // 连着两轮加了没效果，停下
+							}
+							prevDelta = delta
+							probing = 0
+							continue
+						}
+						stall = 0
+					}
+
+					// 试探性加一批：不低于 2 个，最多加到上限
+					add := probing
+					if add < 2 {
+						add = 2
+					}
+					var spawned int32
+					for i := int32(0); i < add && atomic.LoadInt32(&active) < maxWorkers; i++ {
+						spawn()
+						spawned++
+					}
+					probing = spawned
+					prevDelta = delta
 				}
-				var spawned int32
-				for i := int32(0); i < add && atomic.LoadInt32(&active) < maxWorkers; i++ {
-					spawn()
-					spawned++
-				}
-				probing = spawned
-				prevDelta = delta
 			}
-		}
-	}()
+		}()
+	}
 
 	wg.Wait()
 	f.Close()

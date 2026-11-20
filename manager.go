@@ -24,10 +24,11 @@ type Job struct {
 	Rate     int64     `json:"rate"`
 	FilePath string    `json:"file_path"`
 
-	SegN     int       `json:"seg_n,omitempty"` // 并发分块数（0=自动）
-	// Single 为真时强制单连接：不分段、不增长。给插件接管小文件用 ——
-	// 几十 KB 的文件开 16 路分段，建连接的开销比下载本身还大。
-	Single   bool      `json:"single,omitempty"`
+	SegN int `json:"seg_n,omitempty"` // 分块并发：1=单线程（不分段）、2..32=固定、0=默认
+	// NoGrow 为真时不做自适应增长（固定并发和单线程都置它）。
+	// 为什么需要：自适应对下大文件是对的，但小文件或已知快源，
+	// 每 3 秒试探多开连接纯是浪费。
+	NoGrow   bool      `json:"no_grow,omitempty"`
 	Workers  int       `json:"workers,omitempty"` // 当前活跃连接数（自适应）
 	Segments []Segment `json:"segments,omitempty"`
 
@@ -115,9 +116,9 @@ func (m *Manager) AddHTTPWithHeaders(url, name, dir string, segN int, headers ma
 	return m.AddHTTPEx(url, name, dir, segN, headers, false)
 }
 
-// AddHTTPEx 在 AddHTTPWithHeaders 之上再多一个「强制单连接」开关。
-// 浏览器插件对小于 1MB 的文件传 single=true，避免分段开销大于下载本身。
-func (m *Manager) AddHTTPEx(url, name, dir string, segN int, headers map[string]string, single bool) (*Job, error) {
+// AddHTTPEx 在 AddHTTPWithHeaders 之上再多一个「不自动增长」开关。
+// segN=1 表示单线程（直连接收整个响应，不分段）。
+func (m *Manager) AddHTTPEx(url, name, dir string, segN int, headers map[string]string, noGrow bool) (*Job, error) {
 	if segN <= 0 {
 		segN = 16
 	}
@@ -135,7 +136,7 @@ func (m *Manager) AddHTTPEx(url, name, dir string, segN int, headers map[string]
 		Dir:     dir,
 		State:   "queued",
 		SegN:    segN,
-		Single:  single,
+		NoGrow:  noGrow,
 		Headers: headers,
 		Created: time.Now(),
 	}
