@@ -196,7 +196,7 @@ button:active{transform:scale(.97)}
         <span class="grow" style="flex:1"></span>
     <button class="ghost" id="extBtn" title="把浏览器下载交给汐流（装一次就行）" style="flex:0 0 auto;margin-left:auto;font-size:12px;padding:5px 10px">安装浏览器插件</button>
   </div>
-  <div class="dllabel">链接</div>
+  <div class="dllabel" id="dlLabel">链接</div>
   <div class="dlcard" id="addRow">
     <input id="url" placeholder="粘贴链接或 BV 号（直链 / 磁力 / B站 / .torrent）">
     <div class="dlcard-row">
@@ -427,8 +427,10 @@ function showPage(which){
   // 互传页不需要下载那两行（以前切过去还杵在那儿，白占半屏）
   const addRow = document.getElementById('addRow');
   const dlTools = document.getElementById('dlTools');
+  const dlLabel = document.getElementById('dlLabel');
   if (addRow) addRow.style.display = onSh ? 'none' : '';
   if (dlTools) dlTools.style.display = onSh ? 'none' : '';
+  if (dlLabel) dlLabel.style.display = onSh ? 'none' : '';
   if (onSh) {
     lsPollPeers();
     const holder = document.getElementById('pageSh');
