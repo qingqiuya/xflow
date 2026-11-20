@@ -146,6 +146,10 @@ button:active{transform:scale(.97)}
 .pbar.on{display:block}
 .pbar i{display:block;height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,#5cc9ff,#3ddc84);transition:width .12s}
 .drop-foot{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:8px;min-height:18px;font-size:11.5px;color:#6b7488}
+.inboxrow{display:flex;align-items:center;gap:9px;background:#141821;border:1px solid #2b3446;border-radius:9px;padding:8px 11px;margin-bottom:6px;font-size:12.5px}
+.inboxrow .ib-ico{flex:0 0 auto}
+.inboxrow .ib-nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.inboxrow .ib-sz{flex:0 0 auto;color:#8b93a7;font-size:11.5px}
 .qwrap{margin:0 0 14px}
 .qhead{display:flex;align-items:center;font-size:12.5px;color:#8b93a7;margin-bottom:7px}
 .qlist{display:flex;flex-direction:column;gap:6px;max-height:210px;overflow:auto}
@@ -299,7 +303,8 @@ button:active{transform:scale(.97)}
   <div class="sec">
     <div class="sec-hd">收件箱
       <span class="grow" style="flex:1"></span>
-      <label class="sw"><input type="checkbox" id="shAuto"><i></i>自动收</label>
+      <button class="tiny" id="shInboxClear" title="把收件目录里的文件全删掉">清空</button>
+      <label class="sw" style="margin-left:10px"><input type="checkbox" id="shAuto"><i></i>自动收</label>
     </div>
     <div class="inbox" id="shInbox"></div>
   </div>
@@ -497,6 +502,26 @@ function pickSharePeer(i){
   shBrowse('');
 }
 // 收件箱：列出收件目录里的文件
+document.getElementById('shInboxClear').onclick = async () => {
+  if (!confirm('把收件目录里的文件全部删掉？删了就找不回来。')) return;
+  try {
+    const d = await (await fetch('/api/share')).json();
+    const dir = d && d.dir;
+    if (!dir) return;
+    const r = await (await fetch('/api/fs?path=' + encodeURIComponent(dir))).json();
+    const files = (r.items||[]).filter(it => !it.dir);
+    const sep = dir.includes('\\') ? '\\' : '/';
+    let ok = 0;
+    for (const f of files) {
+      const p = dir.replace(/[\\/]$/,'') + sep + f.name;
+      const rr = await (await fetch('/api/delete?path=' + encodeURIComponent(p), {method:'POST'})).json();
+      if (rr.ok) ok++;
+    }
+    alert('清空 ' + ok + ' 个文件');
+    shLoadInbox();
+  } catch (e) { alert('清空失败：' + e.message) }
+};
+
 async function shLoadInbox(){
   const el = document.getElementById('shInbox');
   if (!el) return;
@@ -506,13 +531,37 @@ async function shLoadInbox(){
     if (!dir) { el.textContent = '（未知目录）'; return }
     const r = await (await fetch('/api/fs?path=' + encodeURIComponent(dir))).json();
     const files = (r.items||[]).filter(it => !it.dir);
-    if (!files.length) { el.textContent = '（空）'; return }
-    el.innerHTML = files.slice(0, 8).map(f =>
-      '<a href="#" data-f="' + esc(dir.replace(/[\\/]$/,'') + (dir.includes('\\')?'\\':'/') + f.name) + '" ' +
-      'style="color:var(--acc);text-decoration:none;margin-right:10px">' + esc(f.name) + '</a>'
-    ).join('');
-    el.querySelectorAll('a[data-f]').forEach(a => {
-      a.onclick = e => { e.preventDefault(); window.open('/api/download?path=' + encodeURIComponent(a.dataset.f), '_blank'); };
+    if (!files.length) { el.innerHTML = ''; return }
+    const sep = dir.includes('\\') ? '\\' : '/';
+    const full = n => dir.replace(/[\\/]$/,'') + sep + n;
+    el.innerHTML = files.slice(0, 30).map(f => {
+      const p = full(f.name);
+      return '<div class="inboxrow" data-p="' + esc(p) + '">'
+        + '<span class="ib-ico">📄</span>'
+        + '<span class="ib-nm" title="' + esc(p) + '">' + esc(f.name) + '</span>'
+        + '<span class="ib-sz">' + fs(f.size) + '</span>'
+        + '<button class="tiny ib-open">打开</button>'
+        + '<button class="tiny ib-send">发走</button>'
+        + '<button class="tiny ib-del" style="color:#ff8a80">删除</button>'
+        + '</div>';
+    }).join('');
+    el.querySelectorAll('.inboxrow').forEach(row => {
+      const p = row.dataset.p;
+      row.querySelector('.ib-open').onclick = () => window.open('/api/download?path=' + encodeURIComponent(p), '_blank');
+      row.querySelector('.ib-send').onclick = async () => {
+        if (!shPeer) { alert('先选一台设备'); return }
+        try {
+          const r2 = await (await fetch('/api/send?peer=' + encodeURIComponent(shPeer.ip + ':' + shPeer.port) + '&path=' + encodeURIComponent(p) + '&token=' + encodeURIComponent(shTokOf(shPeer.ip) || ''), {method:'POST'})).json();
+          if (!r2.ok) throw new Error(r2.err || '失败');
+          alert('已发走：' + p.split(/[\\/]/).pop());
+        } catch (e) { alert('发失败：' + e.message); }
+      };
+      row.querySelector('.ib-del').onclick = async () => {
+        if (!confirm('删除 ' + p.split(/[\\/]/).pop() + '？删了就找不回来。')) return;
+        const r3 = await (await fetch('/api/delete?path=' + encodeURIComponent(p), {method:'POST'})).json();
+        if (!r3.ok) alert('删不掉：' + (r3.err || ''));
+        shLoadInbox();
+      };
     });
   }catch(e){ el.textContent = '（读不到）' }
 }

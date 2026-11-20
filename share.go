@@ -43,8 +43,8 @@ type incomingFile struct {
 var (
 	shareMu      sync.Mutex
 	shareAuto    = true
-	shareEnabled = true   // 互传总开关（关掉后互传相关接口一律 403）
-	shareDirOv  string // 收到的文件放哪（空 = <下载目录>/收到）
+	shareEnabled = true // 互传总开关（关掉后互传相关接口一律 403）
+	shareDirOv   string // 收到的文件放哪（空 = <下载目录>/收到）
 	sharePend    = map[string]*incomingFile{}
 	shareOrder   []string
 )
@@ -405,6 +405,25 @@ func registerShare(mux *http.ServeMux) {
 			return
 		}
 		writeShareJSON(w, map[string]any{"ok": true, "peer": peer, "size": st.Size(), "reply": strings.TrimSpace(string(body))})
+	})
+
+	// 删除收件目录里的文件（桌面端收件箱的「删除」用）
+	mux.HandleFunc("/api/delete", func(w http.ResponseWriter, r *http.Request) {
+		p := r.URL.Query().Get("path")
+		if p == "" || !underAllowed(p) {
+			writeShareJSON(w, map[string]any{"ok": false, "err": "路径不允许"})
+			return
+		}
+		if st, err := os.Stat(p); err != nil || st.IsDir() {
+			writeShareJSON(w, map[string]any{"ok": false, "err": "不是文件"})
+			return
+		}
+		if err := os.Remove(p); err != nil {
+			writeShareJSON(w, map[string]any{"ok": false, "err": err.Error()})
+			return
+		}
+		appLog("删除收件文件 %s", p)
+		writeShareJSON(w, map[string]any{"ok": true})
 	})
 
 	mux.HandleFunc("/api/incoming", func(w http.ResponseWriter, r *http.Request) {
