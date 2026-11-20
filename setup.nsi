@@ -58,8 +58,12 @@ Section "Install"
   SetOutPath "$INSTDIR"
   File "XFlow.exe"
   File "app.ico"
-  ; 浏览器接管插件（不预装，用户到 chrome://extensions 手动加载 unpacked）
+  ; 浏览器接管插件：解压目录（"加载已解压的扩展程序"用）+ crx（拖进扩展页一步装完）
+  ; 为什么不能全自动装进浏览器：Chromium 从 2025 起把非商店的静默安装（注册表
+  ; 外部扩展、force-list）都判成"不受信任"并停用，除非走企业策略。所以这里
+  ; 把两种装法拉满，剩下那一步（点"添加扩展程序"）只能用户自己点。
   File /r "ext"
+  File /oname=xflow-ext.crx "dist\xflow-ext-${APPVERSION}.crx"
   File "浏览器插件-安装说明.txt"
   ; 许可：MIT + 第三方组件全量原文（MPL/Apache/BSD 的分发义务）
   File "LICENSE"
@@ -105,6 +109,7 @@ Section "Uninstall"
   Delete "$INSTDIR\XFlow.exe"
   Delete "$INSTDIR\app.ico"
   Delete "$INSTDIR\浏览器插件-安装说明.txt"
+  Delete "$INSTDIR\xflow-ext.crx"
   Delete "$INSTDIR\LICENSE"
   Delete "$INSTDIR\THIRD_PARTY_LICENSES.md"
   RMDir /r "$INSTDIR\licenses"
