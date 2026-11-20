@@ -1,6 +1,6 @@
 Unicode true
 !define APPNAME "XFlow"
-!define APPVERSION "1.6.43"
+!define APPVERSION "1.6.44"
 !define PUBLISHER "qingqiuya"
 !define APPEXE "XFlow.exe"
 

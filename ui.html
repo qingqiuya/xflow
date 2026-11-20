@@ -111,15 +111,19 @@ button:active{transform:scale(.97)}
 .sec-hd{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;color:var(--dim);margin-bottom:9px;letter-spacing:.3px}
 .sec-tip{font-weight:400;color:#5b6478;font-size:11.5px}
 .devgrid{display:flex;flex-wrap:wrap;gap:9px}
-.devcard{display:flex;align-items:center;gap:11px;background:rgba(26,31,42,.85);border:1px solid #2b3446;border-radius:12px;padding:11px 15px;cursor:pointer;transition:.15s;position:relative;min-width:210px}
+.devcard{display:flex;align-items:center;gap:10px;background:rgba(26,31,42,.85);border:1px solid #2b3446;border-radius:12px;padding:9px 13px;cursor:pointer;transition:.15s;position:relative;min-width:190px}
+.devcard .av{width:30px;height:30px;border-radius:50%;background:#1b2130;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:#9fb3d1;flex:0 0 auto}
+.devcard.on .av{background:rgba(76,194,255,.18);color:var(--acc)}
+.devcard .pick{position:absolute;right:9px;top:9px;font-size:10.5px;color:var(--acc);opacity:0;transition:.15s}
+.devcard.on .pick{opacity:1}
 .devcard:hover{border-color:#33405a;background:rgba(29,35,47,.85)}
 .devcard.on{border-color:var(--acc);background:rgba(76,194,255,.10);box-shadow:0 0 0 3px rgba(76,194,255,.10)}
 .devcard .dot{width:7px;height:7px;border-radius:99px;background:var(--ok);box-shadow:0 0 8px rgba(61,220,132,.7);flex:0 0 auto}
 .devcard.off .dot{background:#5b6478;box-shadow:none}
-.devcard .dn{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:300px}
+.devcard .dn{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:250px;padding-right:32px}
 .devcard .di{font-size:11px;color:#6b7488;margin-top:1px}
 .devcard .dn-wrap{min-width:0}
-.drop{border:1.5px dashed #2b3446;border-radius:14px;padding:26px 16px;text-align:center;cursor:pointer;transition:.15s;background:rgba(18,21,28,.45);margin-bottom:16px}
+.drop{border:1.5px dashed #2b3446;border-radius:14px;padding:16px 16px;text-align:center;cursor:pointer;transition:.15s;background:rgba(18,21,28,.45);margin-bottom:16px}
 .drop:hover{border-color:var(--acc);background:rgba(76,194,255,.06)}
 .drop.hot{border-color:var(--acc);background:rgba(76,194,255,.12);transform:scale(.995)}
 .drop-ico{font-size:22px;color:var(--acc);opacity:.85;line-height:1}
@@ -164,7 +168,7 @@ button:active{transform:scale(.97)}
         <span class="grow" style="flex:1"></span>
     <button class="ghost" id="extBtn" title="把浏览器下载交给汐流（装一次就行）" style="flex:0 0 auto;font-size:12px;padding:5px 10px">安装浏览器插件</button>
   </div>
-  <div class="addrow">
+  <div class="addrow" id="addRow">
     <input id="url" placeholder="粘贴链接 / 磁力 / BV 号…">
     <input id="name" placeholder="文件名（可留空）" style="flex:0 0 130px;font-size:12.5px">
     <input id="segs" type="number" min="1" max="32" step="1" value="8" title="下载连接数，1=单线程，最大 32" style="flex:0 0 62px;font-size:12.5px;text-align:center;padding:9px 4px">
@@ -357,6 +361,11 @@ function showPage(which){
   document.getElementById('pageSh').classList.toggle('on', onSh);
   document.getElementById('tabDl').classList.toggle('on', !onSh);
   document.getElementById('tabSh').classList.toggle('on', onSh);
+  // 互传页不需要下载那两行（以前切过去还杵在那儿，白占半屏）
+  const addRow = document.getElementById('addRow');
+  const dlTools = document.getElementById('dlTools');
+  if (addRow) addRow.style.display = onSh ? 'none' : '';
+  if (dlTools) dlTools.style.display = onSh ? 'none' : '';
   if (onSh) {
     const holder = document.getElementById('pageSh');
     const body = document.getElementById('shareMask');
@@ -388,6 +397,17 @@ async function shOpen(){
   }
 }
 
+// mDNS 回来的名字长这样：XFlow@qingqiu-9950X3D._xflow._tcp.local.
+// 直接摆到卡片上又长又吓人，这里剥成 hostname。
+function shortDevName(name, ip){
+  if (!name) return ip || '';
+  let s = String(name)
+    .replace(/\._xflow\._tcp\.local\.?$/i, '')
+    .replace(/^XFlow@/i, '')
+    .trim();
+  return s || (ip || '设备');
+}
+
 function renderDevCards(){
   const box=document.getElementById('devGrid');
   if(!box) return;
@@ -398,10 +418,13 @@ function renderDevCards(){
   }
   box.innerHTML=shPeers.map((p,i)=>{
     const on = shPeer && shPeer.ip===p.ip && shPeer.port===p.port;
-    return '<div class="devcard'+(on?' on':'')+'" data-i="'+i+'">'
-      +'<span class="dot"></span>'
-      +'<div class="dn-wrap"><div class="dn">'+esc(p.name||p.ip)+'</div>'
-      +'<div class="di">'+esc(p.ip)+':'+p.port+(p.os?' · '+esc(p.os):'')+'</div></div></div>';
+    const nm = shortDevName(p.name, p.ip);
+    const av = (p.os==='android'||p.os==='ios')?'📱':'💻';
+    return '<div class="devcard'+(on?' on':'')+'" data-i="'+i+'" title="'+esc(p.name||p.ip)+'">'
+      +'<span class="av">'+av+'</span>'
+      +'<div class="dn-wrap"><div class="dn">'+esc(nm)+'</div>'
+      +'<div class="di">'+esc(p.ip)+':'+p.port+(p.os?' · '+esc(p.os):'')+'</div></div>'
+      +'<span class="pick">已选</span></div>';
   }).join('');
   box.querySelectorAll('.devcard').forEach(el=>{
     el.onclick=()=>pickSharePeer(parseInt(el.dataset.i,10));
@@ -414,7 +437,7 @@ function pickSharePeer(i){
   document.getElementById('shTok').value=shTokOf(shPeer.ip);
   document.getElementById('shMsg').textContent='';
   const dt=document.getElementById('dropTo');
-  if(dt) dt.textContent='发到 '+shPeer.name+' 的收件目录';
+  if(dt) dt.textContent='发到 '+shortDevName(shPeer.name, shPeer.ip)+' 的收件目录';
   renderDevCards();
   shBrowse('');
 }
