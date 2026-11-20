@@ -20,6 +20,8 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -29,6 +31,8 @@ import (
 	"sync"
 	"time"
 )
+
+var errIsDir = errors.New("只能发文件，目录暂不支持")
 
 const (
 	lsPort          = 53317
@@ -144,6 +148,8 @@ func startLocalSend() {
 		}
 		if d.Alias != "" {
 			lsRememberPeer(d)
+			host, _, _ := net.SplitHostPort(r.RemoteAddr)
+			lsRememberPeerEx(d, host, d.Port)
 		}
 		writeShareJSON(w, lsSelf())
 	})
@@ -363,6 +369,7 @@ func lsMulticastLoop() {
 		if !d.Announce {
 			continue
 		}
+		lsRememberPeerEx(d, src.IP.String(), d.Port)
 		// 对方在喊：先按协议回一个 /register，失败再回 UDP
 		go lsRegisterBack(d, src)
 	}
@@ -393,4 +400,148 @@ func lsRegisterBack(d lsDevice, src *net.UDPAddr) {
 		c.Write(b)
 		c.Close()
 	}
+}
+
+// ---------------- 发送方向（汐流 → 别人装的 LocalSend） ----------------
+
+type lsPeer struct {
+	Device   lsDevice
+	IP       string
+	Port     int
+	LastSeen time.Time
+}
+
+var (
+	lsPeerMu sync.Mutex
+	lsPeers  = map[string]*lsPeer{} // key = ip:port
+)
+
+func lsRememberPeerEx(d lsDevice, ip string, port int) {
+	if ip == "" {
+		return
+	}
+	if port == 0 {
+		port = lsPort
+	}
+	key := ip + ":" + itoa(port)
+	lsPeerMu.Lock()
+	lsPeers[key] = &lsPeer{Device: d, IP: ip, Port: port, LastSeen: time.Now()}
+	lsPeerMu.Unlock()
+}
+
+// lsSnapshotPeers 返回 2 分钟内见过的设备（界面用）。
+func lsSnapshotPeers() []*lsPeer {
+	now := time.Now()
+	out := make([]*lsPeer, 0, len(lsPeers))
+	lsPeerMu.Lock()
+	for k, p := range lsPeers {
+		if now.Sub(p.LastSeen) > 2*time.Minute {
+			delete(lsPeers, k)
+			continue
+		}
+		out = append(out, p)
+	}
+	lsPeerMu.Unlock()
+	return out
+}
+
+// lsSendFile 按 LocalSend v2 协议把本地文件推给对面：prepare-upload → upload。
+func lsSendFile(ip, port, path string) error {
+	if port == "" {
+		port = itoa(lsPort)
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	st, err := f.Stat()
+	if err != nil {
+		return err
+	}
+	if st.IsDir() {
+		return errIsDir
+	}
+	fileID := lsRand(4)
+	meta := lsFileMeta{
+		ID:       fileID,
+		FileName: filepath.Base(path),
+		Size:     st.Size(),
+		FileType: "application/octet-stream",
+	}
+	body, _ := json.Marshal(map[string]any{
+		"info":  lsSelf(),
+		"files": map[string]lsFileMeta{fileID: meta},
+	})
+	base := "http://" + net.JoinHostPort(ip, port) + lsBase
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Post(base+"/prepare-upload", "application/json", strings.NewReader(string(body)))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return fmt.Errorf("对方拒绝（HTTP %d）：%s", resp.StatusCode, strings.TrimSpace(string(raw)))
+	}
+	var prep struct {
+		SessionID string            `json:"sessionId"`
+		Files     map[string]string `json:"files"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&prep); err != nil {
+		return fmt.Errorf("解析对方响应失败：%w", err)
+	}
+	tok := prep.Files[fileID]
+	if prep.SessionID == "" || tok == "" {
+		return fmt.Errorf("对方没给 session/token")
+	}
+	url := base + "/upload?sessionId=" + prep.SessionID + "&fileId=" + fileID + "&token=" + tok
+	req, err := http.NewRequest(http.MethodPost, url, f)
+	if err != nil {
+		return err
+	}
+	req.ContentLength = st.Size()
+	req.Header.Set("Content-Type", "application/octet-stream")
+	sendClient := &http.Client{Timeout: 0}
+	r2, err := sendClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer r2.Body.Close()
+	if r2.StatusCode != 200 {
+		raw, _ := io.ReadAll(io.LimitReader(r2.Body, 512))
+		return fmt.Errorf("上传失败（HTTP %d）：%s", r2.StatusCode, strings.TrimSpace(string(raw)))
+	}
+	appLog("localsend 已发送 %q（%d 字节）到 %s", filepath.Base(path), st.Size(), net.JoinHostPort(ip, port))
+	return nil
+}
+
+// registerLocalSendAPI 把 LocalSend 的发送能力挂到主端口（17777）上。
+// 注意：53317 那套是给外人按 LocalSend 协议调用的，这里是汐流自己的界面用的。
+func registerLocalSendAPI(mux *http.ServeMux) {
+	mux.HandleFunc("/api/ls/peers", func(w http.ResponseWriter, r *http.Request) {
+		writeShareJSON(w, map[string]any{"ok": true, "peers": lsSnapshotPeers()})
+	})
+	mux.HandleFunc("/api/ls/send", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeShareJSON(w, map[string]any{"ok": false, "err": "要 POST"})
+			return
+		}
+		ip := r.URL.Query().Get("peer")
+		port := r.URL.Query().Get("port")
+		path := r.URL.Query().Get("path")
+		if ip == "" || path == "" {
+			writeShareJSON(w, map[string]any{"ok": false, "err": "要 peer 和 path"})
+			return
+		}
+		if !underAllowed(path) {
+			writeShareJSON(w, map[string]any{"ok": false, "err": "路径不在允许范围内"})
+			return
+		}
+		if err := lsSendFile(ip, port, path); err != nil {
+			writeShareJSON(w, map[string]any{"ok": false, "err": err.Error()})
+			return
+		}
+		writeShareJSON(w, map[string]any{"ok": true})
+	})
 }

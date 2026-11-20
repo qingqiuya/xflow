@@ -275,6 +275,7 @@ func main() {
 	registerBiliLogin(mux)
 	registerInstallExt(mux)
 	go startLocalSend()
+	registerLocalSendAPI(mux)
 
 	mux.HandleFunc("/api/add", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {

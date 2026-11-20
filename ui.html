@@ -382,6 +382,7 @@ function showPage(which){
   if (addRow) addRow.style.display = onSh ? 'none' : '';
   if (dlTools) dlTools.style.display = onSh ? 'none' : '';
   if (onSh) {
+    lsPollPeers();
     const holder = document.getElementById('pageSh');
     const body = document.getElementById('shareMask');
     if (body.parentNode !== holder) holder.appendChild(body);
@@ -423,6 +424,18 @@ function shortDevName(name, ip){
   return s || (ip || '设备');
 }
 
+// LocalSend 设备（别人手机/电脑上装的官方客户端）：只显示，发送要走本机文件路径，
+// 浏览器拖进来的 File 拿不到绝对路径，所以先当「看得到、暂不能直接拖」的卡片。
+let lsPeers = [];
+async function lsPollPeers(){
+  try{
+    const d = await (await fetch('/api/ls/peers')).json();
+    lsPeers = (d && d.peers) || [];
+    if(document.getElementById('pageSh').classList.contains('on')) renderDevCards();
+  }catch(e){}
+}
+setInterval(lsPollPeers, 8000);
+
 function renderDevCards(){
   const box=document.getElementById('devGrid');
   if(!box) return;
@@ -441,10 +454,26 @@ function renderDevCards(){
       +'<div class="di">'+esc(p.ip)+':'+p.port+(p.os?' · '+esc(p.os):'')+'</div></div>'
       +'<span class="pick">已选</span></div>';
   }).join('');
-  box.querySelectorAll('.devcard').forEach(el=>{
+  if(lsPeers.length){
+    box.innerHTML += lsPeers.map((p,i)=>{
+      const nm = shortDevName(p.Device && p.Device.alias, p.IP);
+      return '<div class="devcard ls" data-ls="'+i+'" title="LocalSend 设备：'+esc(nm)+' · '+esc(p.IP)+'">'
+        +'<span class="av">🛰️</span>'
+        +'<div class="dn-wrap"><div class="dn">'+esc(nm)+'</div>'
+        +'<div class="di">'+esc(p.IP)+' · LocalSend</div></div></div>';
+    }).join('');
+  }
+  box.querySelectorAll('.devcard[data-i]').forEach(el=>{
     el.onclick=()=>pickSharePeer(parseInt(el.dataset.i,10));
   });
-  document.getElementById('devTip').textContent=shPeers.length+' 台在线';
+  box.querySelectorAll('.devcard[data-ls]').forEach(el=>{
+    el.onclick=()=>{
+      const p=lsPeers[parseInt(el.dataset.ls,10)];
+      if(!p) return;
+      alert('这是 LocalSend 设备（'+p.IP+'）。\n\n汐流已经能和它互传文件了，但发送要拿本机文件路径，\n浏览器拖进来的文件给不出路径 —— 这块下一步补。\n\n现在可以先让它把文件发过来。');
+    };
+  });
+  document.getElementById('devTip').textContent=(shPeers.length+lsPeers.length)+' 台在线';
 }
 function pickSharePeer(i){
   const p=shPeers[i]; if(!p) return;
