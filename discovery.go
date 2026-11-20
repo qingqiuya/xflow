@@ -11,12 +11,12 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"strings"
 	"fmt"
 	"net"
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -49,7 +49,6 @@ func discoveryName() string {
 	}
 	return "XFlow@" + host
 }
-
 
 // primaryIfaces 找出承载主 IPv4 的那个网卡（跳过 172./100./169.254. 这类虚拟/旁路地址）。
 // 找不到就返回 nil（交给库播所有网卡）。
@@ -142,6 +141,11 @@ func startDiscovery(port int, lan bool) {
 					}
 				}
 				if ip == "127.0.0.1" || ip == "::1" {
+					continue
+				}
+				// 别把自己列进「附近设备」：本机注册的实例会自己播回自己，
+				// 名字和 LAN IP 都对得上（以前只挡了 127.0.0.1，于是自己一直显示在列表里）。
+				if unescapeMDNS(e.ServiceInstanceName()) == discoveryName() || ip == localIPv4() {
 					continue
 				}
 				peerMu.Lock()
@@ -239,7 +243,6 @@ func localIPv4() string {
 	}
 	return fallback
 }
-
 
 // pickIPv4 从 mDNS 报上来的地址里挑一个能用的。
 // 多网卡的机器（比如 G55 有 enp1s0 172.16.0.12 + enp2s0 10.11.11.12）会把所有网卡都播出去，
